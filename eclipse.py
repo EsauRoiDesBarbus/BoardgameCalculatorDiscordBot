@@ -11,7 +11,17 @@ def listToTuple (integer_list):
 
 class Ship:
     def __init__ (self, type, number, init, hull, computer, shield, canon_array, missile_array):
-        self.type = type #0 interceptor, 1 cruiser, 2 dreadnought, 3 starbase
+        self.type = type #"int" interceptor, "cru" cruiser, "dre" dreadnought, "sba" starbase
+        self.prio = 0 #the priority for ancients
+        if   (type =="int"):
+            self.prio = 1
+        elif (type =="sba"): # we consider that a starbase is bigger than an int, but smaller than a cru based on blueprint size
+            self.prio = 10 #strictly more than all ints
+        elif (type =="cru"):
+            self.prio = 100 #strictly more than all sbas
+        elif (type =="dre"):
+            self.prio = 1000 #strictly more than all crus
+
         self.numb = number #how many ships of that type there are
         self.init = init   #how much intiative they have
         self.hull = hull
@@ -28,9 +38,10 @@ class Ship:
 
 
 class BattleWinChances:
-    def __init__ (self, attacker_ship_list, defender_ship_list): 
+    def __init__ (self, attacker_ship_list, defender_ship_list, npc=False): 
         self.att_ship_list = attacker_ship_list
         self.def_ship_list = defender_ship_list
+        self.npc = npc
         # State of battle is one big array, with each coordinate corresponding to : 
         # 0: round initiative order 
         # 1-end-1 : remaining hit points of every single ship, starting with attacker ships
@@ -40,6 +51,7 @@ class BattleWinChances:
         att_total_hp = 0
         ship_index = 0
         ship_types = [] # a list of id to see when two consecutive ships are of the same type
+        self.ship_prios = []
         id = 0
         for ship in attacker_ship_list:
             ship.setBattleIndexes ("att", [ship_index + i for i in range(ship.numb)])
@@ -48,6 +60,7 @@ class BattleWinChances:
                 self.att_ships += [ship.hull+2]
                 att_total_hp += ship.hull+1
                 ship_types += [id]
+                self.ship_prios += [ship.prio]
             id += 1
         self.def_ships = []
         def_total_hp = 0
@@ -62,6 +75,7 @@ class BattleWinChances:
                 self.def_ships += [ship.hull+2]
                 def_total_hp += ship.hull+1
                 ship_types += [id]
+                self.ship_prios += [ship.prio]
             id += 1
         ship_types += [-1] # to avoid exceeding the length of the list in the algorithm
         dims = [2* size_round] + self.att_ships +self.def_ships + [2] #turn (with missiles), att ships hp, def ships hp, attacker or defender
@@ -242,33 +256,64 @@ class BattleWinChances:
         sign = 1
         max_chance = 0.0
         first_index = self.def_index #firing on defense ships
+        last_index  = len (cur_index)
         tuple_end = (0,)
         if cur_ship.side == "def":
             sign =-1 #attack maximize winrate, defense minimize win rate
             max_chance = -1.0
             first_index = self.att_index #firing on attack ships
+            last_index  = self.def_index
             tuple_end = (1,)
 
         if alive >0:
-            total_proba = 0.0
             win_chance = 0.0
             damages_per_result = self.transition_table [turn][alive-1] # list of outcomes with each a proba and all possible damage assignements
-            for _ in range (len(damages_per_result)-1 ): #last is full miss
+            for _ in range (len(damages_per_result)-1 ): # for each dice result (last is full miss)
                 damages = damages_per_result[_]
                 proba = damages[0]
+
+                max_chance = 0.0 # reinitialize max chance
+                if cur_ship.side == "def":
+                    max_chance = -1.0
+
+                if self.npc :
+                    max_kill_score = 0      # max number of ship killed times their value (which corresponds to their size)
+                    min_dama_score = 100000 # min remaining HP of the biggest ship alive
+                    biggest_ship_prio = 0   # how large is the biggest ship alive
                 
-                
-                for result in range (1, len(damages)):
+                for assignment in range (1, len(damages)): # for each damage assignment
                     
-                    dam = damages[result]
+                    dam = damages[assignment]
                     for target_ship in range (len(dam)):
                         cur_index [first_index + target_ship] = max(ship_index [first_index + target_ship] - dam[target_ship], 0)
                     tuple = listToTuple (cur_index)
                     tuple += tuple_end
                     chance = self.state_win_chance [tuple]
 
-                    max_chance = max (max_chance, sign*chance)
-                total_proba += proba
+                    if (self.npc)and(cur_ship.side == "def") :
+                        kill_score = 0 # number of ship killed times their value (which corresponds to their size)
+                        dama_score = 100000 # remaining HP of the biggest ship alive
+                        for i in range (first_index, last_index):
+                            if   (cur_index[i]==0): #ship dead T-T
+                                kill_score += self.ship_prios[i-1]
+                            elif (self.ship_prios[i-1]>=biggest_ship_prio):
+                                dama_score = cur_index[i]
+                                if (self.ship_prios[i-1]>biggest_ship_prio): #hit a higher priority ship, updating priority
+                                    biggest_ship_prio = self.ship_prios[i-1]
+                                    min_dama_score = 100000
+                                
+                        if   (kill_score> max_kill_score):
+                            max_kill_score = kill_score
+                            min_dama_score = dama_score
+                            max_chance = sign*chance
+                        elif (kill_score==max_kill_score)and(dama_score< min_dama_score):
+                            min_dama_score = dama_score
+                            max_chance = sign*chance
+                        elif (kill_score==max_kill_score)and(dama_score==min_dama_score):
+                            max_chance = max (max_chance, sign*chance)
+                    else :
+                        # just take the highest chance of winning
+                        max_chance = max (max_chance, sign*chance)
                 win_chance += proba*sign*max_chance
         
             #print ("win chance =", sign*win_chance)
@@ -516,7 +561,50 @@ ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
 
 #test = BattleWinChances ([eridani], [ancient])
 
-print ("Optimal missile hit assignation test (should return (5/6)^4 )")
+
+
+print ("NPC damage assignment tests")
+
+int_att = Ship("int", 6, 3, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
+cruiser = Ship("cru", 1, 2, 2, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
+ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+print ("              1 cru VS ancient                  ")
+test = BattleWinChances ([         cruiser], [ancient])
+print ("6 dummy int + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
+test = BattleWinChances ([int_att, cruiser], [ancient])
+print ("6 dummy int + 1 cru VS ancient WITH NPC RULE  (should be more than above)")
+test = BattleWinChances ([int_att, cruiser], [ancient], npc=True)
+print ("1 cru w 6 more hull VS ancient                (should be equal to  above)")
+
+cruiser = Ship("cru", 1, 2, 8, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
+test = BattleWinChances ([         cruiser], [ancient], npc=True)
+
+
+
+print ("1 uber glass canon int + 3 dummy cru VS GCDS B OPTIMAL DAMAGE (should return about   1/2^4 = 0.0625)")
+int_att = Ship("int", 1, 3, 0, 4, 0, [0,0,0,8,0], [0,0,0,0,0])
+cruiser = Ship("cru", 3, 2, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
+gcdsmis = Ship("dre", 1, 0, 3, 2, 0, [0,0,0,1,0], [4,0,0,0,0])
+test = BattleWinChances ([int_att, cruiser], [gcdsmis])
+print ("1 uber glass canon int + 3 dummy cru VS GCDS B WITH NPC RULE  (should return about 1-1/2^4 = 0.9375)")
+test = BattleWinChances ([int_att, cruiser], [gcdsmis], npc=True)
+
+
+
+
+
+print (" ")
+
+
+print ("Missile test (should return 0.25)")
+int_def = Ship("int", 2, 2, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+int_att = Ship("int", 1, 2, 0, 2, 0, [0,0,0,0,0], [2,0,0,0,0])
+
+print ("1 int with 2 ion missiles and 2 comp VS 2 int with 0 hull")
+test = BattleWinChances ([int_att], [int_def])
+
+
+print ("Optimal missile hit assignation test (should return (5/6)^4 = 0.48225)")
 int_def = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
 int_att = Ship("int", 1, 2, 0, 4, 0, [0,0,0,0,0], [2,0,0,0,0])
 dre_att = Ship("dre", 1, 0, 0, 4, 1, [0,0,0,0,0], [0,2,0,0,0])
@@ -536,13 +624,8 @@ test = BattleWinChances ([int_att, dre_att], [int_def])
 
 
 
-print ("Missile test (should return 0.25)")
 
-int_def = Ship("int", 2, 2, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-int_att = Ship("int", 1, 2, 0, 2, 0, [0,0,0,0,0], [2,0,0,0,0])
 
-print ("1 int with 2 ion missiles and 2 comp VS 2 int with 0 hull")
-test = BattleWinChances ([int_att], [int_def])
 
 
 
