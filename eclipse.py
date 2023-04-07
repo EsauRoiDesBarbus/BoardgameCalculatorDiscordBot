@@ -3,6 +3,9 @@
 import numpy as np
 import time
 
+import re
+
+
 def listToTuple (integer_list):
     tuple = ()
     for integer in integer_list:
@@ -79,8 +82,9 @@ class BattleWinChances:
             id += 1
         ship_types += [-1] # to avoid exceeding the length of the list in the algorithm
         dims = [2* size_round] + self.att_ships +self.def_ships + [2] #turn (with missiles), att ships hp, def ships hp, attacker or defender
-        self.state_win_chance = np.zeros ( dims ) # attacker chance starts at 0 (attacker defeat)
-        self.state_win_chance [Ellipsis, 1] = 1.0 # defender chance starts at 1 (defender defeat)
+        self.state_win_chance = np.zeros ( dims ) 
+        self.state_win_chance [Ellipsis, 1] =-2.0 # attacker chance starts below 0 (worse than attacker defeat)
+        self.state_win_chance [Ellipsis, 1] = 2.0 # defender chance starts above 1 (worse than defender defeat)
 
         # step 2: turn order
         #find highest initiative
@@ -102,14 +106,15 @@ class BattleWinChances:
         #step3: compute transition table 
         self.transitionTable()
 
-        #step 3: propagate win chance backward (=in increasing number of total hit points)
-        #print ("att_hp=", att_hp, "def_hp=", def_hp)
+        #step 4: propagate win chance backward (=in increasing number hit points)
         not_done = True
         index = [-1] #initialize index at -1 0 ... 0
         for _ in range (len(self.att_ships) + len(self.def_ships)):
             index += [0]
         all_ships = self.att_ships + self.def_ships
         while (not_done):
+            self.computeWinChance (index)
+
             not_done = False
             for ship in range (len(self.att_ships) + len(self.def_ships)):
                 if (ship_types[ship]==ship_types[ship+1]):
@@ -128,16 +133,42 @@ class BattleWinChances:
                     for prev_ship in range (ship, -1, -1):
                         if ship_types[prev_ship]==ship_types[ship]:
                             index[prev_ship+1]=0
-
-            #print (index)
             
-            self.computeWinChance (index)
 
-        #print (self.stateWinChance)
-        start_index = ()
+        # return win chance 
+        start_index = []
         for d in dims:
-            start_index += (d-1,)
-        print ("attacker win chance =", self.state_win_chance[start_index])
+            start_index += [d-1]
+        print ("attacker win chance =", self.state_win_chance[listToTuple(start_index)])
+
+        #step 5: propagate state probability forward (=in decreasing number hit points)
+        self.att_win_chance = 0.0 # to check results
+        self.def_win_chance = 0.0 # to check results
+        self.state_expectancy = np.zeros ( [2* size_round] + self.att_ships +self.def_ships ) # array with the probability of each state
+        start_index.pop ()
+        self.state_expectancy[listToTuple(start_index)]=1.0 #initial state is guaranteed to happen
+        index = start_index
+
+        not_done = True
+        while (not_done):
+            self.computeExpectancy (index)
+
+            not_done = False
+            for ship in range (len(self.att_ships) + len(self.def_ships)):
+                if (index[ship+1]>=1):
+                    index[ship+1]-= 1
+                    not_done = True
+                    for prev_ship in range (ship-1, -1, -1):
+                        #reduce hp of all previous ships of the same type
+                        if ship_types[prev_ship]==ship_types[ship]:
+                            index[prev_ship+1]=index[ship+1]
+                    break
+                else:
+                    #reset hp of that ship
+                    index[ship+1] = all_ships[ship] -1
+            
+                    
+        print ("winner expectancies =", self.att_win_chance, self.def_win_chance, self.att_win_chance+self.def_win_chance)
 
     def computeWinChance (self, ship_index) :
         
@@ -506,11 +537,169 @@ class BattleWinChances:
 
             damages_per_result.append (damages)
 
-
+        return (damages_per_result)
+    
+    def computeExpectancy(self, ship_index):
+        turn_size = len (self.att_ship_list) + len (self.def_ship_list)
         
 
+        #check whether there is at least 1 ship alive
+        att_hp =0
+        def_hp =0
+        for i in range (self.att_index, self.def_index ):
+            att_hp += ship_index[i]
+        for i in range (self.def_index, len(ship_index)):
+            def_hp += ship_index[i]
+        if   (att_hp==0) :
+            #attacker lost, counting remaining def ships
+            for turn in range (2*turn_size):
+                cur_index = ship_index.copy ()
+                cur_index[0] = turn
 
-        return (damages_per_result)
+                self.def_win_chance += self.state_expectancy[listToTuple (cur_index)]
+
+        elif (def_hp==0) :
+            #attacker won, counting remaining att ships
+            for turn in range (2*turn_size):
+                cur_index = ship_index.copy ()
+                cur_index[0] = turn
+
+                self.att_win_chance += self.state_expectancy[listToTuple (cur_index)]
+
+        else :
+            # step 1 : propagate expectancy of missile rounds
+            for turn in range (2*turn_size-1, turn_size-1, -1):
+                cur_index = ship_index.copy()
+                cur_index[0] = turn
+                self.propagateStateExpectancy(cur_index, full_miss=True )
+            # step 2 : compute expectancy of canon rounds by solving a linear system
+            # because canon rounds loop back on themselves, the expectancy of the entire round are defined implicitly as solution of a linear system
+            A = np.zeros ((turn_size, turn_size))
+            b = np.zeros ( turn_size )
+            
+
+            for turn in range (turn_size):
+                cur_index = ship_index.copy ()
+                cur_index[0] = turn
+                (win_chance, proba_full_miss) = self.computeStateWinChance (cur_index) # TODO upgrade
+                b[turn] = self.state_expectancy[listToTuple(cur_index)]
+                A[turn, turn] = 1
+                
+                if (turn == 0):
+                    A[turn, turn_size-1] =-proba_full_miss
+                else :
+                    A[turn, turn     -1] =-proba_full_miss
+            #x = np.linalg.solve(A, b)
+            x = np.linalg.solve(np.transpose(A), b)
+            for turn in range (turn_size):
+                cur_index = ship_index.copy ()
+                cur_index[0] = turn
+
+                self.state_expectancy[listToTuple (cur_index)] = x[turn]
+
+            # step 3 : propagate expectancy of canon rounds 
+            for turn in range (turn_size):
+                cur_index = ship_index.copy()
+                cur_index[0] = turn
+                self.propagateStateExpectancy(cur_index, full_miss=False)
+        return
+    
+    def propagateStateExpectancy (self, ship_index, full_miss) :
+        # Ranges all dice results and propagates expectancy through it
+
+        turn_size = len (self.att_ship_list) + len (self.def_ship_list)
+        # which ship is firing ?
+        cur_index = ship_index.copy()
+        turn = cur_index[0]
+        if turn < turn_size :
+            cur_ship = self.turn_order[turn]
+        else:
+            #missile round
+            cur_ship = self.turn_order[turn-turn_size]
+
+        # how many of them are alive ?
+        first_index = self.att_index #counting an attack ship
+        if cur_ship.side == "def":
+            first_index = self.def_index #counting a defense ship
+
+        alive = 0
+        for ind in cur_ship.indexes:
+            if ship_index[first_index+ind]>0:
+                alive +=1
+
+        # what's next turn ?
+        if turn == 0:
+            cur_index[0] = len (self.att_ship_list) + len (self.def_ship_list) -1
+        else :
+            cur_index[0] = turn -1
+        
+
+        sign = 1
+        first_index = self.def_index #firing on defense ships
+        last_index  = len (cur_index)
+        tuple_end = (0,)
+        if cur_ship.side == "def":
+            sign =-1 #attack maximize winrate, defense minimize win rate
+            first_index = self.att_index #firing on attack ships
+            last_index  = self.def_index
+            tuple_end = (1,)
+
+        if alive >0:
+            damages_per_result = self.transition_table [turn][alive-1] # list of outcomes with each a proba and all possible damage assignements
+            for _ in range (len(damages_per_result)-(full_miss==False) ): # for each dice result. Last result is full miss and only encountered with missile rounds
+                damages = damages_per_result[_]
+                proba = damages[0]
+
+                max_chance =-2.0 # reinitialize max chance
+
+                if self.npc :
+                    max_kill_score = 0      # max number of ship killed times their value (which corresponds to their size)
+                    min_dama_score = 100000 # min remaining HP of the biggest ship alive
+                    biggest_ship_prio = 0   # how large is the biggest ship alive
+                
+                for assignment in range (1, len(damages)): # for each damage assignment
+                    
+                    dam = damages[assignment]
+                    for target_ship in range (len(dam)):
+                        cur_index [first_index + target_ship] = max(ship_index [first_index + target_ship] - dam[target_ship], 0)
+                    tuple = listToTuple (cur_index)
+                    tuple += tuple_end
+                    chance = self.state_win_chance [tuple]
+
+                    if (self.npc)and(cur_ship.side == "def") :
+                        kill_score = 0 # number of ship killed times their value (which corresponds to their size)
+                        dama_score = 100000 # remaining HP of the biggest ship alive
+                        for i in range (first_index, last_index):
+                            if   (cur_index[i]==0): #ship dead T-T
+                                kill_score += self.ship_prios[i-1]
+                            elif (self.ship_prios[i-1]>=biggest_ship_prio):
+                                dama_score = cur_index[i]
+                                if (self.ship_prios[i-1]>biggest_ship_prio): #hit a higher priority ship, updating priority
+                                    biggest_ship_prio = self.ship_prios[i-1]
+                                    min_dama_score = 100000
+                                
+                        if   (kill_score> max_kill_score):
+                            max_kill_score = kill_score
+                            min_dama_score = dama_score
+                            max_chance = sign*chance
+                            best_index = cur_index.copy()
+                        elif (kill_score==max_kill_score)and(dama_score< min_dama_score):
+                            min_dama_score = dama_score
+                            max_chance = sign*chance
+                            best_index = cur_index.copy()
+                        elif (kill_score==max_kill_score)and(dama_score==min_dama_score):
+                            if (sign*chance>max_chance):
+                                max_chance = sign*chance
+                                best_index = cur_index.copy()
+                    else :
+                        # just take the highest chance of winning
+                        if (sign*chance>max_chance):
+                            max_chance = sign*chance
+                            best_index = cur_index.copy()
+
+                self.state_expectancy[listToTuple(best_index)]+=proba*self.state_expectancy[listToTuple(ship_index)]
+
+        return ()
 
 
     def displayStateWinChance (self, att_ship, def_ship):
@@ -556,93 +745,92 @@ cruiser    = Ship("cru", 2, 2, 2, 2, 0, [2,0,0,0,0], [0,0,0,0,0])
 
 #test = BattleWinChances ([interceptor, dreadnought], [cruiser])
 
-eridani = Ship("cru", 1, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
-ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
 
-#test = BattleWinChances ([eridani], [ancient])
+if (False):
+    eridani = Ship("cru", 1, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
+    ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
 
+    test = BattleWinChances ([eridani], [ancient])
 
+npc_dam_test = True
+missile_test = True
+perform_test = True
 
-print ("NPC damage assignment tests")
+if (npc_dam_test):
 
-dum_int = Ship("int", 6, 3, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
-cruiser = Ship("cru", 1, 2, 2, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
-dum_dre = Ship("dre", 1, 3, 5, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
-ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
-print ("              1 cru VS ancient                  ")
-test = BattleWinChances ([         cruiser], [ancient])
-print ("6 dummy int + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
-test = BattleWinChances ([dum_int, cruiser], [ancient])
-print ("1 dummy dre + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
-test = BattleWinChances ([dum_dre, cruiser], [ancient])
-print ("6 dummy int + 1 cru VS ancient WITH NPC RULE  (should be more than above)")
-test = BattleWinChances ([dum_int, cruiser], [ancient], npc=True)
-print ("1 dummy dre + 1 cru VS ancient WITH NPC RULE  (should be equal to  above)")
-test = BattleWinChances ([dum_dre, cruiser], [ancient], npc=True)
-print ("1 cru w 6 more hull VS ancient                (should be equal to  above)")
+    print ("NPC damage assignment tests")
 
-cruiser = Ship("cru", 1, 2, 8, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
-test = BattleWinChances ([         cruiser], [ancient], npc=True)
+    dum_int = Ship("int", 6, 3, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
+    cruiser = Ship("cru", 1, 2, 2, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
+    dum_dre = Ship("dre", 1, 3, 5, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
+    ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+    print ("              1 cru VS ancient                  ")
+    test = BattleWinChances ([         cruiser], [ancient])
+    print ("6 dummy int + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
+    test = BattleWinChances ([dum_int, cruiser], [ancient])
+    print ("1 dummy dre + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
+    test = BattleWinChances ([dum_dre, cruiser], [ancient])
+    print ("6 dummy int + 1 cru VS ancient WITH NPC RULE  (should be more than above)")
+    test = BattleWinChances ([dum_int, cruiser], [ancient], npc=True)
+    print ("1 dummy dre + 1 cru VS ancient WITH NPC RULE  (should be equal to  above)")
+    test = BattleWinChances ([dum_dre, cruiser], [ancient], npc=True)
+    print ("1 cru w 6 more hull VS ancient                (should be equal to  above)")
 
-
-
-print ("1 uber glass canon int + 3 dummy cru VS GCDS B OPTIMAL DAMAGE (should return about   1/2^4 = 0.0625)")
-int_att = Ship("int", 1, 3, 0, 4, 0, [0,0,0,8,0], [0,0,0,0,0])
-cruiser = Ship("cru", 3, 2, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
-gcdsmis = Ship("dre", 1, 0, 3, 2, 0, [0,0,0,1,0], [4,0,0,0,0])
-test = BattleWinChances ([int_att, cruiser], [gcdsmis])
-print ("1 uber glass canon int + 3 dummy cru VS GCDS B WITH NPC RULE  (should return about 1-1/2^4 = 0.9375)")
-test = BattleWinChances ([int_att, cruiser], [gcdsmis], npc=True)
+    cruiser = Ship("cru", 1, 2, 8, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
+    test = BattleWinChances ([         cruiser], [ancient], npc=True)
 
 
 
+    print ("1 uber glass canon int + 3 dummy cru VS GCDS B OPTIMAL DAMAGE (should return about   1/2^4 = 0.0625)")
+    int_att = Ship("int", 1, 3, 0, 4, 0, [0,0,0,8,0], [0,0,0,0,0])
+    cruiser = Ship("cru", 3, 2, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
+    gcdsmis = Ship("dre", 1, 0, 3, 2, 0, [0,0,0,1,0], [4,0,0,0,0])
+    test = BattleWinChances ([int_att, cruiser], [gcdsmis])
+    print ("1 uber glass canon int + 3 dummy cru VS GCDS B WITH NPC RULE  (should return about 1-1/2^4 = 0.9375)")
+    test = BattleWinChances ([int_att, cruiser], [gcdsmis], npc=True)
 
 
-print (" ")
+    print (" ")
+
+if (missile_test):
+
+    print ("Missile test (should return 0.25)")
+    int_def = Ship("int", 2, 2, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+    int_att = Ship("int", 1, 2, 0, 2, 0, [0,0,0,0,0], [2,0,0,0,0])
+
+    print ("1 int with 2 ion missiles and 2 comp VS 2 int with 0 hull")
+    test = BattleWinChances ([int_att], [int_def])
 
 
-print ("Missile test (should return 0.25)")
-int_def = Ship("int", 2, 2, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-int_att = Ship("int", 1, 2, 0, 2, 0, [0,0,0,0,0], [2,0,0,0,0])
+    print ("Optimal missile hit assignation test (should return (5/6)^4 = 0.48225)")
+    int_def = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+    int_att = Ship("int", 1, 2, 0, 4, 0, [0,0,0,0,0], [2,0,0,0,0])
+    dre_att = Ship("dre", 1, 0, 0, 4, 1, [0,0,0,0,0], [0,2,0,0,0])
 
-print ("1 int with 2 ion missiles and 2 comp VS 2 int with 0 hull")
-test = BattleWinChances ([int_att], [int_def])
-
-
-print ("Optimal missile hit assignation test (should return (5/6)^4 = 0.48225)")
-int_def = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-int_att = Ship("int", 1, 2, 0, 4, 0, [0,0,0,0,0], [2,0,0,0,0])
-dre_att = Ship("dre", 1, 0, 0, 4, 1, [0,0,0,0,0], [0,2,0,0,0])
-
-test = BattleWinChances ([int_att, dre_att], [int_def])
+    test = BattleWinChances ([int_att, dre_att], [int_def])
 
 
-print ("Optimal hit assignation test (should return 0.47 both times)")
-int_def = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-int_att = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-dre_att = Ship("dre", 1, 0,10, 2, 1, [0,0,0,0,0], [0,0,0,0,0])
+    print ("Optimal hit assignation test (should return 0.47 both times)")
+    int_def = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+    int_att = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+    dre_att = Ship("dre", 1, 0,10, 2, 1, [0,0,0,0,0], [0,0,0,0,0])
 
-print ("2 int VS 2 int")
-test = BattleWinChances ([int_att         ], [int_def])
-print ("2 int + 1 cru with no canon VS 2 int")
-test = BattleWinChances ([int_att, dre_att], [int_def])
+    print ("2 int VS 2 int")
+    test = BattleWinChances ([int_att         ], [int_def])
+    print ("2 int + 1 cru with no canon VS 2 int")
+    test = BattleWinChances ([int_att, dre_att], [int_def])
 
+    print (" ")
 
+if (perform_test):
 
-
-
-
-
-
-
-
-for i in range (1, 9):
-    print ("Pain test " + str(i) + ": " + str(i) + " int VS 2 sba") 
-    int_att = Ship("int", i, 3, 3, 0, 0, [2,0,0,0,0], [0,0,0,0,0])
-    sba_def = Ship("sba", 2, 4, 4, 2, 0, [2,0,0,0,0], [0,2,0,0,0])
+    for i in range (1, 9):
+        print ("Pain test " + str(i) + ": " + str(i) + " int VS 2 sba") 
+        int_att = Ship("int", i, 3, 3, 0, 0, [2,0,0,0,0], [0,0,0,0,0])
+        sba_def = Ship("sba", 2, 4, 4, 2, 0, [2,0,0,0,0], [0,2,0,0,0])
 
 
-    tic = time.perf_counter()
-    test = BattleWinChances ([int_att], [sba_def]) #, sba_def])
-    toc = time.perf_counter()
-    print(f"Solved in {toc - tic:0.4f} seconds")
+        tic = time.perf_counter()
+        test = BattleWinChances ([int_att], [sba_def]) #, sba_def])
+        toc = time.perf_counter()
+        print(f"Solved in {toc - tic:0.4f} seconds")
