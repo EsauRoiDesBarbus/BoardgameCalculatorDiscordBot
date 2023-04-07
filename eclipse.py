@@ -204,6 +204,7 @@ class BattleWinChances:
 
             ax.set_xticks (xplacement)
             ax.set_xticklabels (ship_names)
+            ax.set_yticks ([])
 
             percentages = ["{:.2%}".format(p) for p in self.still_alive]
 
