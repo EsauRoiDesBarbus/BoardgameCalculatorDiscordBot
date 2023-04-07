@@ -2,6 +2,7 @@
 
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 
 import re
 
@@ -41,7 +42,7 @@ class Ship:
 
 
 class BattleWinChances:
-    def __init__ (self, attacker_ship_list, defender_ship_list, npc=False): 
+    def __init__ (self, attacker_ship_list, defender_ship_list, npc=False, remaining_ships = False): 
         self.att_ship_list = attacker_ship_list
         self.def_ship_list = defender_ship_list
         self.npc = npc
@@ -141,34 +142,75 @@ class BattleWinChances:
             start_index += [d-1]
         print ("attacker win chance =", self.state_win_chance[listToTuple(start_index)])
 
-        #step 5: propagate state probability forward (=in decreasing number hit points)
-        self.att_win_chance = 0.0 # to check results
-        self.def_win_chance = 0.0 # to check results
-        self.state_expectancy = np.zeros ( [2* size_round] + self.att_ships +self.def_ships ) # array with the probability of each state
-        start_index.pop ()
-        self.state_expectancy[listToTuple(start_index)]=1.0 #initial state is guaranteed to happen
-        index = start_index
+        if (remaining_ships):
 
-        not_done = True
-        while (not_done):
-            self.computeExpectancy (index)
+            #step 5: propagate state probability forward (=in decreasing number hit points)
+            self.att_win_chance = 0.0 # to check results
+            self.def_win_chance = 0.0 # to check results
+            self.state_expectancy = np.zeros ( [2* size_round] + self.att_ships +self.def_ships ) # array with the probability of each state
+            start_index.pop ()
+            self.state_expectancy[listToTuple(start_index)]=1.0 #initial state is guaranteed to happen
+            index = start_index
 
-            not_done = False
-            for ship in range (len(self.att_ships) + len(self.def_ships)):
-                if (index[ship+1]>=1):
-                    index[ship+1]-= 1
-                    not_done = True
-                    for prev_ship in range (ship-1, -1, -1):
-                        #reduce hp of all previous ships of the same type
-                        if ship_types[prev_ship]==ship_types[ship]:
-                            index[prev_ship+1]=index[ship+1]
-                    break
-                else:
-                    #reset hp of that ship
-                    index[ship+1] = all_ships[ship] -1
+            self.still_alive = np.zeros (len(self.att_ships)+len(self.def_ships))
+
+            not_done = True
+            while (not_done):
+                self.computeExpectancy (index)
+
+                not_done = False
+                for ship in range (len(self.att_ships) + len(self.def_ships)):
+                    if (index[ship+1]>=1):
+                        index[ship+1]-= 1
+                        not_done = True
+                        for prev_ship in range (ship-1, -1, -1):
+                            #reduce hp of all previous ships of the same type
+                            if ship_types[prev_ship]==ship_types[ship]:
+                                index[prev_ship+1]=index[ship+1]
+                        break
+                    else:
+                        #reset hp of that ship
+                        index[ship+1] = all_ships[ship] -1
+
             
-                    
-        print ("winner expectancies =", self.att_win_chance, self.def_win_chance, self.att_win_chance+self.def_win_chance)
+            ship_names = [] # for legend
+            xplacement = [] # place of the bar along the x axis
+            bar_colors = [] # to differentiate att and def
+            x_value = 1
+            for ship in attacker_ship_list:
+                for n in range (ship.numb):
+                    if (n==0):
+                        ship_names += [str(ship.numb-n) + " "  + ship.type ]
+                    else :
+                        ship_names += [str(ship.numb-n) + "+ " + ship.type ]
+                    bar_colors += ["blue"]
+                    xplacement += [x_value]
+                    x_value += 1
+                x_value += 1
+            x_value += 1
+            for ship in defender_ship_list:
+                for n in range (ship.numb):
+                    if (n==0):
+                        ship_names += [str(ship.numb-n) + " "  + ship.type ]
+                    else :
+                        ship_names += [str(ship.numb-n) + "+ " + ship.type ]
+                    bar_colors += ["red"]
+                    xplacement += [x_value]
+                    x_value += 1
+                x_value += 1
+
+            fig, ax = plt.subplots()
+            bars = ax.bar(xplacement, self.still_alive, color = bar_colors)
+
+            ax.set_xticks (xplacement)
+            ax.set_xticklabels (ship_names)
+
+            percentages = ["{:.2%}".format(p) for p in self.still_alive]
+
+            ax.bar_label(bars, percentages)
+            ax.set_title ("Survival chance")
+
+            print ("winner expectancies =", self.att_win_chance, self.def_win_chance, self.att_win_chance+self.def_win_chance)
 
     def computeWinChance (self, ship_index) :
         
@@ -558,6 +600,11 @@ class BattleWinChances:
 
                 self.def_win_chance += self.state_expectancy[listToTuple (cur_index)]
 
+                # count how many ships are still alive
+                for ship in range (len(ship_index)-1):
+                    if ship_index[ship+1]>0:
+                        self.still_alive[ship]+=self.state_expectancy[listToTuple (cur_index)]
+
         elif (def_hp==0) :
             #attacker won, counting remaining att ships
             for turn in range (2*turn_size):
@@ -565,6 +612,11 @@ class BattleWinChances:
                 cur_index[0] = turn
 
                 self.att_win_chance += self.state_expectancy[listToTuple (cur_index)]
+
+                # count how many ships are still alive
+                for ship in range (len(ship_index)-1):
+                    if ship_index[ship+1]>0:
+                        self.still_alive[ship]+=self.state_expectancy[listToTuple (cur_index)]
 
         else :
             # step 1 : propagate expectancy of missile rounds
@@ -746,11 +798,15 @@ cruiser    = Ship("cru", 2, 2, 2, 2, 0, [2,0,0,0,0], [0,0,0,0,0])
 #test = BattleWinChances ([interceptor, dreadnought], [cruiser])
 
 
-if (False):
-    eridani = Ship("cru", 1, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
-    ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+if (True):
+    eridan1 = Ship("cru", 2, 2, 3, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
+    eridan2 = Ship("cru", 2, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
+    ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
 
-    test = BattleWinChances ([eridani], [ancient])
+    test = BattleWinChances ([eridan1], [ancient], remaining_ships=True)
+    test = BattleWinChances ([eridan2], [ancient], remaining_ships=True)
+
+    #plt.show()
 
 npc_dam_test = True
 missile_test = True
@@ -834,3 +890,6 @@ if (perform_test):
         test = BattleWinChances ([int_att], [sba_def]) #, sba_def])
         toc = time.perf_counter()
         print(f"Solved in {toc - tic:0.4f} seconds")
+
+
+plt.show ()
