@@ -140,7 +140,7 @@ class BattleWinChances:
         start_index = []
         for d in dims:
             start_index += [d-1]
-        print ("attacker win chance =", self.state_win_chance[listToTuple(start_index)])
+        self.win_chance = self.state_win_chance[listToTuple(start_index)]
 
         if (remaining_ships):
 
@@ -211,7 +211,9 @@ class BattleWinChances:
             ax.bar_label(bars, percentages)
             ax.set_title ("Survival chance")
 
-            print ("winner expectancies =", self.att_win_chance, self.def_win_chance, self.att_win_chance+self.def_win_chance)
+            plt.savefig ('battle.jpg', bbox_inches = 'tight')
+
+            print ("winner expectancies =", self.att_win_chance, self.def_win_chance)
 
     def computeWinChance (self, ship_index) :
         
@@ -790,107 +792,108 @@ def hitChance (att_computer, def_shield):
         hit_chance = 1+modif
     return (hit_chance)
 
+if __name__ == '__main__':
 
-# type, number, init, hull, computer, shield, canons, missiles
-interceptor= Ship("int", 2, 3, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-dreadnought= Ship("dre", 1, 0, 4, 2, 1, [1,3,0,0,0], [0,0,0,0,0])
-cruiser    = Ship("cru", 2, 2, 2, 2, 0, [2,0,0,0,0], [0,0,0,0,0])
+    # type, number, init, hull, computer, shield, canons, missiles
+    interceptor= Ship("int", 2, 3, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+    dreadnought= Ship("dre", 1, 0, 4, 2, 1, [1,3,0,0,0], [0,0,0,0,0])
+    cruiser    = Ship("cru", 2, 2, 2, 2, 0, [2,0,0,0,0], [0,0,0,0,0])
 
-#test = BattleWinChances ([interceptor, dreadnought], [cruiser])
-
-
-if (True):
-    eridan1 = Ship("cru", 2, 2, 3, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
-    eridan2 = Ship("cru", 2, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
-    ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
-
-    test = BattleWinChances ([eridan1], [ancient], remaining_ships=True)
-    test = BattleWinChances ([eridan2], [ancient], remaining_ships=True)
-
-    #plt.show()
-
-npc_dam_test = True
-missile_test = True
-perform_test = True
-
-if (npc_dam_test):
-
-    print ("NPC damage assignment tests")
-
-    dum_int = Ship("int", 6, 3, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
-    cruiser = Ship("cru", 1, 2, 2, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
-    dum_dre = Ship("dre", 1, 3, 5, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
-    ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
-    print ("              1 cru VS ancient                  ")
-    test = BattleWinChances ([         cruiser], [ancient])
-    print ("6 dummy int + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
-    test = BattleWinChances ([dum_int, cruiser], [ancient])
-    print ("1 dummy dre + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
-    test = BattleWinChances ([dum_dre, cruiser], [ancient])
-    print ("6 dummy int + 1 cru VS ancient WITH NPC RULE  (should be more than above)")
-    test = BattleWinChances ([dum_int, cruiser], [ancient], npc=True)
-    print ("1 dummy dre + 1 cru VS ancient WITH NPC RULE  (should be equal to  above)")
-    test = BattleWinChances ([dum_dre, cruiser], [ancient], npc=True)
-    print ("1 cru w 6 more hull VS ancient                (should be equal to  above)")
-
-    cruiser = Ship("cru", 1, 2, 8, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
-    test = BattleWinChances ([         cruiser], [ancient], npc=True)
+    #test = BattleWinChances ([interceptor, dreadnought], [cruiser])
 
 
+    if (True):
+        eridan1 = Ship("cru", 2, 2, 3, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
+        eridan2 = Ship("cru", 2, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
+        ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
 
-    print ("1 uber glass canon int + 3 dummy cru VS GCDS B OPTIMAL DAMAGE (should return about   1/2^4 = 0.0625)")
-    int_att = Ship("int", 1, 3, 0, 4, 0, [0,0,0,8,0], [0,0,0,0,0])
-    cruiser = Ship("cru", 3, 2, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
-    gcdsmis = Ship("dre", 1, 0, 3, 2, 0, [0,0,0,1,0], [4,0,0,0,0])
-    test = BattleWinChances ([int_att, cruiser], [gcdsmis])
-    print ("1 uber glass canon int + 3 dummy cru VS GCDS B WITH NPC RULE  (should return about 1-1/2^4 = 0.9375)")
-    test = BattleWinChances ([int_att, cruiser], [gcdsmis], npc=True)
+        test = BattleWinChances ([eridan1], [ancient], remaining_ships=True)
+        test = BattleWinChances ([eridan2], [ancient], remaining_ships=True)
 
+        #plt.show()
 
-    print (" ")
+    npc_dam_test = True
+    missile_test = True
+    perform_test = True
 
-if (missile_test):
+    if (npc_dam_test):
 
-    print ("Missile test (should return 0.25)")
-    int_def = Ship("int", 2, 2, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-    int_att = Ship("int", 1, 2, 0, 2, 0, [0,0,0,0,0], [2,0,0,0,0])
+        print ("NPC damage assignment tests")
 
-    print ("1 int with 2 ion missiles and 2 comp VS 2 int with 0 hull")
-    test = BattleWinChances ([int_att], [int_def])
+        dum_int = Ship("int", 6, 3, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
+        cruiser = Ship("cru", 1, 2, 2, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
+        dum_dre = Ship("dre", 1, 3, 5, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
+        ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+        print ("              1 cru VS ancient                  ")
+        test = BattleWinChances ([         cruiser], [ancient])
+        print ("6 dummy int + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
+        test = BattleWinChances ([dum_int, cruiser], [ancient])
+        print ("1 dummy dre + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
+        test = BattleWinChances ([dum_dre, cruiser], [ancient])
+        print ("6 dummy int + 1 cru VS ancient WITH NPC RULE  (should be more than above)")
+        test = BattleWinChances ([dum_int, cruiser], [ancient], npc=True)
+        print ("1 dummy dre + 1 cru VS ancient WITH NPC RULE  (should be equal to  above)")
+        test = BattleWinChances ([dum_dre, cruiser], [ancient], npc=True)
+        print ("1 cru w 6 more hull VS ancient                (should be equal to  above)")
 
-
-    print ("Optimal missile hit assignation test (should return (5/6)^4 = 0.48225)")
-    int_def = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-    int_att = Ship("int", 1, 2, 0, 4, 0, [0,0,0,0,0], [2,0,0,0,0])
-    dre_att = Ship("dre", 1, 0, 0, 4, 1, [0,0,0,0,0], [0,2,0,0,0])
-
-    test = BattleWinChances ([int_att, dre_att], [int_def])
-
-
-    print ("Optimal hit assignation test (should return 0.47 both times)")
-    int_def = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-    int_att = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
-    dre_att = Ship("dre", 1, 0,10, 2, 1, [0,0,0,0,0], [0,0,0,0,0])
-
-    print ("2 int VS 2 int")
-    test = BattleWinChances ([int_att         ], [int_def])
-    print ("2 int + 1 cru with no canon VS 2 int")
-    test = BattleWinChances ([int_att, dre_att], [int_def])
-
-    print (" ")
-
-if (perform_test):
-
-    for i in range (1, 9):
-        print ("Pain test " + str(i) + ": " + str(i) + " int VS 2 sba") 
-        int_att = Ship("int", i, 3, 3, 0, 0, [2,0,0,0,0], [0,0,0,0,0])
-        sba_def = Ship("sba", 2, 4, 4, 2, 0, [2,0,0,0,0], [0,2,0,0,0])
+        cruiser = Ship("cru", 1, 2, 8, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
+        test = BattleWinChances ([         cruiser], [ancient], npc=True)
 
 
-        tic = time.perf_counter()
-        test = BattleWinChances ([int_att], [sba_def]) #, sba_def])
-        toc = time.perf_counter()
-        print(f"Solved in {toc - tic:0.4f} seconds")
+
+        print ("1 uber glass canon int + 3 dummy cru VS GCDS B OPTIMAL DAMAGE (should return about   1/2^4 = 0.0625)")
+        int_att = Ship("int", 1, 3, 0, 4, 0, [0,0,0,8,0], [0,0,0,0,0])
+        cruiser = Ship("cru", 3, 2, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
+        gcdsmis = Ship("dre", 1, 0, 3, 2, 0, [0,0,0,1,0], [4,0,0,0,0])
+        test = BattleWinChances ([int_att, cruiser], [gcdsmis])
+        print ("1 uber glass canon int + 3 dummy cru VS GCDS B WITH NPC RULE  (should return about 1-1/2^4 = 0.9375)")
+        test = BattleWinChances ([int_att, cruiser], [gcdsmis], npc=True)
 
 
-plt.show ()
+        print (" ")
+
+    if (missile_test):
+
+        print ("Missile test (should return 0.25)")
+        int_def = Ship("int", 2, 2, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+        int_att = Ship("int", 1, 2, 0, 2, 0, [0,0,0,0,0], [2,0,0,0,0])
+
+        print ("1 int with 2 ion missiles and 2 comp VS 2 int with 0 hull")
+        test = BattleWinChances ([int_att], [int_def])
+
+
+        print ("Optimal missile hit assignation test (should return (5/6)^4 = 0.48225)")
+        int_def = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+        int_att = Ship("int", 1, 2, 0, 4, 0, [0,0,0,0,0], [2,0,0,0,0])
+        dre_att = Ship("dre", 1, 0, 0, 4, 1, [0,0,0,0,0], [0,2,0,0,0])
+
+        test = BattleWinChances ([int_att, dre_att], [int_def])
+
+
+        print ("Optimal hit assignation test (should return 0.47 both times)")
+        int_def = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+        int_att = Ship("int", 2, 2, 2, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+        dre_att = Ship("dre", 1, 0,10, 2, 1, [0,0,0,0,0], [0,0,0,0,0])
+
+        print ("2 int VS 2 int")
+        test = BattleWinChances ([int_att         ], [int_def])
+        print ("2 int + 1 cru with no canon VS 2 int")
+        test = BattleWinChances ([int_att, dre_att], [int_def])
+
+        print (" ")
+
+    if (perform_test):
+
+        for i in range (1, 9):
+            print ("Pain test " + str(i) + ": " + str(i) + " int VS 2 sba") 
+            int_att = Ship("int", i, 3, 3, 0, 0, [2,0,0,0,0], [0,0,0,0,0])
+            sba_def = Ship("sba", 2, 4, 4, 2, 0, [2,0,0,0,0], [0,2,0,0,0])
+
+
+            tic = time.perf_counter()
+            test = BattleWinChances ([int_att], [sba_def]) #, sba_def])
+            toc = time.perf_counter()
+            print(f"Solved in {toc - tic:0.4f} seconds")
+
+
+    plt.show ()
