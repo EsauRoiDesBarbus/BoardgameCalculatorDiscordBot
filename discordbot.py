@@ -125,12 +125,14 @@ async def on_message(message):
         await message.channel.send(response)
 
         exec_time = time.time()
-        test = BattleWinChances (att_ships, def_ships, remaining_ships=True)
+        battle = BattleWinChances (att_ships, def_ships, remaining_ships=True)
         exec_time = time.time() - exec_time
 
-        await message.channel.send("Chance of attacker winning: " + "{:.2%}".format(test.win_chance) )
+        await message.channel.send("Chance of attacker winning: " + "{:.2%}".format(battle.initial_win_chance) )
         await message.channel.send(file=discord.File('battle.jpg'))
         await message.channel.send("execution time =" + "{:.1f}".format(exec_time) + "s")
+        if(battle.errorCheck()):
+            await message.channel.send("**WARNING! INCONSISTENCY DETECTED!**\nThe graph is wrong and perhaps win chance too.")
         
 
     

@@ -163,7 +163,7 @@ class BattleWinChances:
         start_index = []
         for d in dims:
             start_index += [d-1]
-        self.win_chance = self.state_win_chance[listToTuple(start_index)]
+        self.initial_win_chance = self.state_win_chance[listToTuple(start_index)]
 
         if (remaining_ships):
 
@@ -779,9 +779,17 @@ class BattleWinChances:
         return ()
 
 
-    def displayStateWinChance (self, att_ship, def_ship):
-        # displays the array for 2 specific ships TODO
-        return
+    def errorCheck (self):
+        # checks if value function and final state are coherent
+        error  = False
+        precision = 0.00000001
+        # test 1: value function and final state are coherent
+        if (abs(self.att_win_chance-self.initial_win_chance)>precision):
+            error = True 
+        # test 2: do atatck and defense win chacne add up to 100%
+        if (abs(self.att_win_chance+self.def_win_chance-1)>precision):
+            error = True 
+        return (error)
 
 def totalPossibilities (nb_dice, nb_outcomes):
     if   (nb_outcomes == 1):
