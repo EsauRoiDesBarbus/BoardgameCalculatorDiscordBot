@@ -17,7 +17,7 @@ waitsentences = [
     "I take my RES action.",
     "I crunch the numbers into delicious number soup.",
     "I lookup how multiplication works.",
-    "cute lil' electrons flow through my cute lil' MOS transistors.",
+    "cute lil' electrons flow through my cute lil' nMOS transistors.",
     "I crank up math nerdism to 110%.",
     "I build orbitals to have more science cubes.",
     "I build those fleets IRL and make them clash to see how it goes.",
@@ -52,12 +52,40 @@ async def on_message(message):
             response+= "(with any number of ships on each side). Each ship is written:\n"
             response+= "> number type initiative hull computer shield canons missiles.\n"
             response+= "Type = int, cru, dre, sba or npc. Canons are written as a list of letters, one letter per die, **y**ellow, **o**range, **b**lue, **r**ed, **p**ink. Misiles are the same but starting with letter **m**. "
-            response+= "Example:\n> 5 int 4 3 2 1 yyyyyoooobbbrrp myyyyooobbr\nmeans 5 interceptors with 4 initiative, 3 hull, 2 computer, 1 shield, 5 yellow canons, 4 orange canons, 3 blue canons, 2 red canons and 1 pink canon, 4 yellow missiles, 3 orange missiles, 2 blue missiles and 1 red missile"
+            response+= "Example:\n> 5 int 4 3 2 1 yyyyyoooobbbrrp myyyyooobbr\nmeans 5 interceptors with 4 initiative, 3 hull, 2 computer, 1 shield, 5 yellow canons, 4 orange canons, 3 blue canons, 2 red canons and 1 pink canon, 4 yellow missiles, 3 orange missiles, 2 blue missiles and 1 red missile.\n"
+            response+= "Any question, suggestion, bug report, dm Esaü#5796. For more info, type:\n"
+            response+= "> %battle about"
+            await message.channel.send(response)
+            return
+        
+        if (re.search(r".*about.*", message.content)!=None):
+            response = "I'm a lil' discord bot on a lil' raspberry pie using big maths.\n"
+            response+= "**Current functionalities:**\n"
+            response+= "- Every aspect of eclipse 1v1 battles except rift canon and regen.\n"
+            response+= "- Optimal hit assignment: non npc ships deal hits in a way to maximize their chance of winning (achieved using Bellman's dynamic programing).\n"
+            response+= "- High precision: results are exact up to compound floating point errors (error<0.000001%).\n"
+            response+= "- Survival graph: returns the probability of each ship making it out alive (it's a little buggy though).\n"
+            response+= "- Medium performance: can tackle most battles .\n"
+            response+= "**Roadmap:**\n"
+            response+= "- Improve UI based on feedback.\n"
+            response+= "- Moar optimization to solve larger battles.\n"
+            response+= "- Rift canon (those self damage are a pain to implement).\n"
+            response+= "- Three way battles.\n"
+            response+= "- Regenerating ships (I rely on ship hp being nonincreasing so regen is very difficult).\n"
+            response+= "Any question, suggestion, bug report, dm Esaü#5796."
             await message.channel.send(response)
             return
         
         argument = message.content[len(prefix):]
-        sides = argument.split('VS')
+        regex1 = re.search("(.*)(vs|VS|Vs|vS)(.*)" , message.content)
+        if regex1 ==None:
+            await message.channel.send("I do not understand your command. Type:\n> %battle help")
+            return
+        for i in range (4):
+            if regex1[i] ==None:
+                await message.channel.send("I do not understand your command. Type:\n> %battle help")
+                return
+        sides = [regex1[1], regex1[3]]
 
         ship_list_list = []
         for side in sides:
@@ -65,6 +93,13 @@ async def on_message(message):
             ship_list = []
             for ship in ships:
                 regex = re.search(r"(\d+) (int|cru|dre|sba|npc) (\d+) (\d+) (\d+) (\d+)?(.*)", ship)
+                if regex ==None:
+                    await message.channel.send("I do not understand your command. Type:\n> %battle help")
+                    return
+                for i in range (8):
+                    if regex[i] ==None:
+                        await message.channel.send("I do not understand your command. Type:\n> %battle help")
+                        return
                 weapons = regex[7].split ('m')
                 canons = [weapons[0].count('y'), weapons[0].count('o'), weapons[0].count('b'), weapons[0].count('r'), weapons[0].count('p')]
                 if (len(weapons)==2):
@@ -84,7 +119,7 @@ async def on_message(message):
         response+= "**Defender:\n**"
         for ship in def_ships:
             response += ship.toString() + "\n"
-        response+= "**Please wait** while " + waitsentences[random.randint(0, len(waitsentences))]
+        response+= "**Please wait** while " + waitsentences[random.randint(0, len(waitsentences)-1)]
         
         
         await message.channel.send(response)
