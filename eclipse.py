@@ -65,10 +65,9 @@ class Ship:
 
 
 class BattleWinChances:
-    def __init__ (self, attacker_ship_list, defender_ship_list, npc=False, remaining_ships = False): 
+    def __init__ (self, attacker_ship_list, defender_ship_list, remaining_ships = False): 
         self.att_ship_list = attacker_ship_list
         self.def_ship_list = defender_ship_list
-        self.npc = npc
         # State of battle is one big array, with each coordinate corresponding to : 
         # 0: round initiative order 
         # 1-end-1 : remaining hit points of every single ship, starting with attacker ships
@@ -374,7 +373,7 @@ class BattleWinChances:
                 if cur_ship.side == "def":
                     max_chance = -1.0
 
-                if self.npc :
+                if cur_ship.type =="npc" :
                     max_kill_score = 0      # max number of ship killed times their value (which corresponds to their size)
                     min_dama_score = 100000 # min remaining HP of the biggest ship alive
                     biggest_ship_prio = 0   # how large is the biggest ship alive
@@ -388,7 +387,7 @@ class BattleWinChances:
                     tuple += tuple_end
                     chance = self.state_win_chance [tuple]
 
-                    if (self.npc)and(cur_ship.side == "def") :
+                    if cur_ship.type =="npc" :
                         kill_score = 0 # number of ship killed times their value (which corresponds to their size)
                         dama_score = 100000 # remaining HP of the biggest ship alive
                         for i in range (first_index, last_index):
@@ -729,7 +728,7 @@ class BattleWinChances:
 
                 max_chance =-2.0 # reinitialize max chance
 
-                if self.npc :
+                if cur_ship.type =="npc" :
                     max_kill_score = 0      # max number of ship killed times their value (which corresponds to their size)
                     min_dama_score = 100000 # min remaining HP of the biggest ship alive
                     biggest_ship_prio = 0   # how large is the biggest ship alive
@@ -743,7 +742,7 @@ class BattleWinChances:
                     tuple += tuple_end
                     chance = self.state_win_chance [tuple]
 
-                    if (self.npc)and(cur_ship.side == "def") :
+                    if cur_ship.type =="npc" :
                         kill_score = 0 # number of ship killed times their value (which corresponds to their size)
                         dama_score = 100000 # remaining HP of the biggest ship alive
                         for i in range (first_index, last_index):
@@ -853,21 +852,22 @@ if __name__ == '__main__':
         dum_int = Ship("int", 6, 3, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
         cruiser = Ship("cru", 1, 2, 2, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
         dum_dre = Ship("dre", 1, 3, 5, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
-        ancient = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+        ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+        anfalse = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
         print ("              1 cru VS ancient                  ")
-        test = BattleWinChances ([         cruiser], [ancient])
+        test = BattleWinChances ([         cruiser], [ancient]); print (test.initial_win_chance)
         print ("6 dummy int + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
-        test = BattleWinChances ([dum_int, cruiser], [ancient])
+        test = BattleWinChances ([dum_int, cruiser], [anfalse]); print (test.initial_win_chance)
         print ("1 dummy dre + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
-        test = BattleWinChances ([dum_dre, cruiser], [ancient])
+        test = BattleWinChances ([dum_dre, cruiser], [anfalse]); print (test.initial_win_chance)
         print ("6 dummy int + 1 cru VS ancient WITH NPC RULE  (should be more than above)")
-        test = BattleWinChances ([dum_int, cruiser], [ancient], npc=True)
+        test = BattleWinChances ([dum_int, cruiser], [ancient]); print (test.initial_win_chance)
         print ("1 dummy dre + 1 cru VS ancient WITH NPC RULE  (should be equal to  above)")
-        test = BattleWinChances ([dum_dre, cruiser], [ancient], npc=True)
+        test = BattleWinChances ([dum_dre, cruiser], [ancient]); print (test.initial_win_chance)
         print ("1 cru w 6 more hull VS ancient                (should be equal to  above)")
 
         cruiser = Ship("cru", 1, 2, 8, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
-        test = BattleWinChances ([         cruiser], [ancient], npc=True)
+        test = BattleWinChances ([         cruiser], [ancient]); print (test.initial_win_chance)
 
 
 
@@ -875,9 +875,10 @@ if __name__ == '__main__':
         int_att = Ship("int", 1, 3, 0, 4, 0, [0,0,0,8,0], [0,0,0,0,0])
         cruiser = Ship("cru", 3, 2, 0, 0, 0, [0,0,0,0,0], [0,0,0,0,0])
         gcdsmis = Ship("dre", 1, 0, 3, 2, 0, [0,0,0,1,0], [4,0,0,0,0])
-        test = BattleWinChances ([int_att, cruiser], [gcdsmis])
+        test = BattleWinChances ([int_att, cruiser], [gcdsmis]); print (test.initial_win_chance)
         print ("1 uber glass canon int + 3 dummy cru VS GCDS B WITH NPC RULE  (should return about 1-1/2^4 = 0.9375)")
-        test = BattleWinChances ([int_att, cruiser], [gcdsmis], npc=True)
+        gcdsmis = Ship("npc", 1, 0, 3, 2, 0, [0,0,0,1,0], [4,0,0,0,0])
+        test = BattleWinChances ([int_att, cruiser], [gcdsmis]); print (test.initial_win_chance)
 
 
         print (" ")
@@ -889,7 +890,7 @@ if __name__ == '__main__':
         int_att = Ship("int", 1, 2, 0, 2, 0, [0,0,0,0,0], [2,0,0,0,0])
 
         print ("1 int with 2 ion missiles and 2 comp VS 2 int with 0 hull")
-        test = BattleWinChances ([int_att], [int_def])
+        test = BattleWinChances ([int_att], [int_def]); print (test.initial_win_chance)
 
 
         print ("Optimal missile hit assignation test (should return (5/6)^4 = 0.48225)")
@@ -897,7 +898,7 @@ if __name__ == '__main__':
         int_att = Ship("int", 1, 2, 0, 4, 0, [0,0,0,0,0], [2,0,0,0,0])
         dre_att = Ship("dre", 1, 0, 0, 4, 1, [0,0,0,0,0], [0,2,0,0,0])
 
-        test = BattleWinChances ([int_att, dre_att], [int_def])
+        test = BattleWinChances ([int_att, dre_att], [int_def]); print (test.initial_win_chance)
 
 
         print ("Optimal hit assignation test (should return 0.47 both times)")
@@ -906,9 +907,9 @@ if __name__ == '__main__':
         dre_att = Ship("dre", 1, 0,10, 2, 1, [0,0,0,0,0], [0,0,0,0,0])
 
         print ("2 int VS 2 int")
-        test = BattleWinChances ([int_att         ], [int_def])
+        test = BattleWinChances ([int_att         ], [int_def]); print (test.initial_win_chance)
         print ("2 int + 1 cru with no canon VS 2 int")
-        test = BattleWinChances ([int_att, dre_att], [int_def])
+        test = BattleWinChances ([int_att, dre_att], [int_def]); print (test.initial_win_chance)
 
         print (" ")
 
