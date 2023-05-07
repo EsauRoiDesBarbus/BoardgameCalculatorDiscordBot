@@ -4,6 +4,8 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
+
+
 import re
 
 
@@ -38,6 +40,27 @@ class Ship:
         # Info that we store here for convenience even though that creates double dependencies
         self.side = side # "att" or "def"
         self.indexes = indexes #should be a list with the indexes in the Chance array 
+
+    def toString (self):
+        response = str(self.numb)+" "
+        response+= (self.type=="int")*"interceptor" +(self.type=="cru")*"cruiser" +(self.type=="dre")*"dreadnought" +(self.type=="sba")*"starbase" +(self.type=="npc")*"npc"
+        response+= (self.numb>1)*"s" + " with "+str(self.init)+" initiative, "
+        if (self.hull>0):
+            response +=     str(self.hull)+" hull, "
+        if (self.comp>0):
+            response += '+'+str(self.comp)+" computer, "
+        if (self.shie>0):
+            response += '-'+str(self.shie)+" shield, "
+        colors = ["yellow", "orange", "blue", "red", "pink"]
+        for i in range (5):
+            if self.canon_array[i]>0:
+                response += str(self.canon_array[i])+' '+ colors[i] + " canon"    +(self.canon_array[i]>1)*"s" +", "
+        for i in range (5):
+            if self.missi_array[i]>0:
+                response += str(self.missi_array[i])+' '+ colors[i] + " missile"  +(self.missi_array[i]>1)*"s" +", "
+        if self.canon_array[4]+self.missi_array[4]>0:
+            response += "**WARNING! PINK DICE NOT SUPPORTED FOR NOW!, ** "
+        return (response[:-2]) #remove the last space and ,
             
 
 
@@ -212,8 +235,7 @@ class BattleWinChances:
             ax.set_title ("Survival chance")
 
             plt.savefig ('battle.jpg', bbox_inches = 'tight')
-
-            print ("winner expectancies =", self.att_win_chance, self.def_win_chance)
+            print ("win chance", self.att_win_chance, self.def_win_chance)
 
     def computeWinChance (self, ship_index) :
         
