@@ -6,8 +6,8 @@ import random
 import time
 
 
-
-TOKEN = "ODUyOTI3MDE0ODY4MzUzMDc0.YMN8Lg.gAyquxemQWzL1-PRvlymqYraIOA"
+tokenfile = open("token.txt")
+TOKEN = tokenfile.read ()
 
 
 waitsentences = [
