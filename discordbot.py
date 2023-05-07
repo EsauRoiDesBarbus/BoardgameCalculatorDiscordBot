@@ -4,10 +4,18 @@ import re
 from discord.ext import commands
 import random
 import time
+import signal
+
+
+def handler (signum, frame):
+    raise Exception("Timeout")
+
+signal.signal(signal.SIGALRM, handler)
 
 
 tokenfile = open("token.txt")
 TOKEN = tokenfile.read ()
+
 
 
 waitsentences = [
@@ -48,7 +56,7 @@ async def on_message(message):
 
         if (re.search(r".*help.*", message.content)!=None):
             response = "This is a battle calculator for Eclipse, use it with command:\n"
-            response+= "> %battle attship1 + attship2 VS defship1 + defship2\n"
+            response+= "> %battle ship1 + ship2 + ship3 VS ship4 + ship5\n"
             response+= "(with any number of ships on each side). Each ship is written:\n"
             response+= "> number type initiative hull computer shield canons missiles.\n"
             response+= "Type = int, cru, dre, sba or npc. Canons are written as a list of letters, one letter per die, **y**ellow, **o**range, **b**lue, **r**ed, **p**ink. Misiles are the same but starting with letter **m**. "
@@ -123,16 +131,20 @@ async def on_message(message):
         
         
         await message.channel.send(response)
+        signal.alarm(120)
+        try:
+            exec_time = time.time()
+            battle = BattleWinChances (att_ships, def_ships, remaining_ships=True)
+            signal.alarm(0)
+            exec_time = time.time() - exec_time
 
-        exec_time = time.time()
-        battle = BattleWinChances (att_ships, def_ships, remaining_ships=True)
-        exec_time = time.time() - exec_time
-
-        await message.channel.send("Chance of attacker winning: " + "{:.2%}".format(battle.initial_win_chance) )
-        await message.channel.send(file=discord.File('battle.jpg'))
-        await message.channel.send("execution time =" + "{:.1f}".format(exec_time) + "s")
-        if(battle.errorCheck()):
-            await message.channel.send("**WARNING! INCONSISTENCY DETECTED!**\nThe graph is wrong and perhaps win chance too.")
+            await message.channel.send("Chance of attacker winning: " + "{:.2%}".format(battle.initial_win_chance) )
+            await message.channel.send(file=discord.File('battle.jpg'))
+            await message.channel.send("execution time =" + "{:.1f}".format(exec_time) + "s")
+            if(battle.errorCheck()):
+                await message.channel.send("**WARNING! INCONSISTENCY DETECTED!**\nThe graph is wrong and perhaps win chance too.")
+        except Exception as inst: 
+            await message.channel.send("**Exception:** " + str(inst) + "\nCannot solve that battle")
         
 
     
