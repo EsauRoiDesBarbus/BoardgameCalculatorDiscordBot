@@ -362,12 +362,7 @@ class BattleWinChances:
 
                 for assignment in range (2, len(damages)): # for each damage assignment
 
-                    prefix_tuple = listToTuple (after_damage_state[0:first_index])
-                    for _ in range (first_index, last_index):
-                        prefix_tuple = prefix_tuple + (slice(0,-1),)
-                    suffix_tuple = listToTuple (after_damage_state[last_index:])
-
-                    attainable_state_win_chance = self.state_win_chance [prefix_tuple + suffix_tuple]
+                    attainable_states = [ [i] for i in after_damage_state[0:first_index]]
 
                     dam = damages[assignment]
                     target_nb = 0
@@ -385,18 +380,15 @@ class BattleWinChances:
                             for i in range (dam[target_nb*4+die-1]):
                                 possible_states_after_salva_2 = []
                                 for id in possible_states_after_salva:
-                                    possible_states_after_salva_2 += self.graph_edges[target_ship_id-first_index][die][id]
+                                    possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id]
                                 # remove duplicates
                                 possible_states_after_salva = sortAndRemoveDuplicates (possible_states_after_salva_2)
                         target_nb +=1
+                        attainable_states.append(possible_states_after_salva)
 
-                        #if (len(suffix_tuple)==0):
-                        attainable_state_win_chance = attainable_state_win_chance [np.array(possible_states_after_salva)] # this will select lines that correspond to states of the current target ship that are attainable with that salva
-                        #else:
-                        #    attainable_state_win_chance = attainable_state_win_chance [np.array(possible_states_after_salva), suffix_tuple]
 
-                    
-                    chance = max (sign*attainable_state_win_chance.flatten()) # TODO npc targetting
+                    attainable_states+= [ [i] for i in after_damage_state[last_index:]]
+                    chance = max (sign*self.state_win_chance[np.ix_(*attainable_states)].flatten()) # TODO npc targetting
                     max_chance = max (max_chance, chance)
 
                     
@@ -571,7 +563,7 @@ class BattleWinChances:
                     #compute damage corresponding to assignement
                     damage =[0 for i in range (4*nb_targets)] # the 4 first cells are the number of 1, 2, 3 and 4 taken by the first ship and so on
                     for i in range (4*nb_outcomes*nb_targets):
-                        for j in range (nb_targets):
+                        for j in range (nb_outcomes):
                             damage[i]+= assignements[i*nb_outcomes+j] #POSSIBLEBUG
                     #print (damage)
                     damage = listToTuple (damage)
@@ -681,9 +673,9 @@ if __name__ == '__main__':
 
         #plt.show()
 
-    npc_dam_test = False
-    missile_test = False
-    perform_test = False
+    npc_dam_test = True
+    missile_test = True
+    perform_test = True
 
     if (npc_dam_test):
 
