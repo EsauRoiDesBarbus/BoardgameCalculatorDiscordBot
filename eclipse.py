@@ -639,39 +639,6 @@ def makeGraph (nb_ships, hull, print_tables=False):
             print (id, id_to_hp[id], "alive=", bunch_of_lists[0][id], "neighbors 1d", bunch_of_lists[1][id], "2d", bunch_of_lists[2][id], "3d", bunch_of_lists[3][id], "4d", bunch_of_lists[4][id])
 
     return (bunch_of_lists)
-
-
-
-
-def readStateIndex (index, nb_ships, hull):
-    #transforms a statetable index into the ship hps
-    nb_ships_with_hps = [0 for i in range (hull+1)]
-
-    for _ in range (index):
-        print (nb_ships_with_hps)
-        for hp in range (hull+1):
-            if (nb_ships_with_hps[hp] < nb_ships):
-                nb_ships_with_hps[hp]+=1
-                break
-            else:
-                nb_ships_with_hps[hp] =0
-
-    return (nb_ships_with_hps)
-
-
-
-
-
-def totalPossibilities (nb_dice, nb_outcomes):
-    if   (nb_outcomes == 1):
-        possibilities =  nb_dice+1
-    elif (nb_outcomes == 2):
-        possibilities = (nb_dice+1) * (nb_dice+2)//2
-    elif (nb_outcomes == 3):
-        possibilities = (nb_dice+1) * (nb_dice+2)//2 * (nb_dice+3)//3
-    elif (nb_outcomes == 4):
-        possibilities = (nb_dice+1) * (nb_dice+2)//2 * (nb_dice+3)//3 * (nb_dice+4)//4
-    return (possibilities)
  
 def factorialLog (n):
     # returns an array contening ln(0!) to ln(n!)
@@ -710,7 +677,7 @@ if __name__ == '__main__':
         ancient = Ship("npc", 2, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
 
         test = BattleWinChances ([eridan1], [ancient]); print (test.initial_win_chance)
-        #test = BattleWinChances ([eridan2], [ancient]); print (test.initial_win_chance)
+        test = BattleWinChances ([eridan2], [ancient]); print (test.initial_win_chance)
 
         #plt.show()
 
