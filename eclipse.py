@@ -15,6 +15,17 @@ def listToTuple (integer_list):
         tuple += (integer,)
     return (tuple)
 
+def tupleToList (integer_tuple):
+    list = []
+    for integer in integer_tuple:
+        list += (integer,)
+    return (list)
+
+def sortAndRemoveDuplicates (l):
+    l = list(set(l))
+    l.sort()
+    return (l)
+
 class Ship:
     def __init__ (self, type, number, init, hull, computer, shield, canon_array, missile_array):
         self.type = type #"int" interceptor, "cru" cruiser, "dre" dreadnought, "sba" starbase
@@ -35,11 +46,6 @@ class Ship:
         self.shie = shield
         self.canon_array = np.array(canon_array  ) # [y, o, b, r, p], y = number of pink dice, o = number of orange dice etc
         self.missi_array = np.array(missile_array) # [y, o, b, r, p], same
-
-    def setBattleIndexes (self, side, indexes):
-        # Info that we store here for convenience even though that creates double dependencies
-        self.side = side # "att" or "def"
-        self.indexes = indexes #should be a list with the indexes in the Chance array 
 
     def toString (self):
         response = str(self.numb)+" "
@@ -74,40 +80,33 @@ class BattleWinChances:
         # end : 0 for attacker, 1 for defender
         size_round = len (self.att_ship_list) + len (self.def_ship_list)
         self.att_ships = []
-        att_total_hp = 0
         ship_index = 0
         ship_types = [] # a list of id to see when two consecutive ships are of the same type
         self.ship_prios = []
-        id = 0
+
+        self.graph_edges = [] # a list to read the state graph
+
+
         for ship in attacker_ship_list:
-            ship.setBattleIndexes ("att", [ship_index + i for i in range(ship.numb)])
-            ship_index += ship.numb
-            for n in range (ship.numb):
-                self.att_ships += [ship.hull+2]
-                att_total_hp += ship.hull+1
-                ship_types += [id]
-                self.ship_prios += [ship.prio]
-            id += 1
+            self.att_ships += [blockSize (ship.numb, ship.hull)]
+            self.ship_prios += [ship.prio]
+
+            self.graph_edges.append (makeGraph (ship.numb, ship.hull))
+        
         self.def_ships = []
-        def_total_hp = 0
 
         self.att_index = 1            # the index at which attack  ships start
-        self.def_index = 1+ship_index # the index at which defense ships start
+        self.def_index = 1+len(attacker_ship_list) # the index at which defense ships start
         ship_index = 0
         for ship in defender_ship_list:
-            ship.setBattleIndexes ("def", [ship_index + i for i in range(ship.numb)])
-            ship_index += ship.numb
-            for n in range (ship.numb):
-                self.def_ships += [ship.hull+2]
-                def_total_hp += ship.hull+1
-                ship_types += [id]
-                self.ship_prios += [ship.prio]
-            id += 1
-        ship_types += [-1] # to avoid exceeding the length of the list in the algorithm
-        dims = [2* size_round] + self.att_ships +self.def_ships + [2] #turn (with missiles), att ships hp, def ships hp, attacker or defender
+            self.def_ships += [blockSize (ship.numb, ship.hull)]
+            self.ship_prios += [ship.prio]
+
+            self.graph_edges.append (makeGraph (ship.numb, ship.hull))
+
+        dims = [2* size_round] + self.att_ships +self.def_ships #turn (with missiles), att ships hp, def ships hp
         self.state_win_chance = np.zeros ( dims ) 
-        self.state_win_chance [Ellipsis, 1] =-2.0 # attacker chance starts below 0 (worse than attacker defeat)
-        self.state_win_chance [Ellipsis, 1] = 2.0 # defender chance starts above 1 (worse than defender defeat)
+        self.state_win_chance [Ellipsis] = -1000000.0 # uninitialized value, it's high so that I can detect errors
 
         # step 2: turn order
         #find highest initiative
@@ -119,44 +118,35 @@ class BattleWinChances:
         # order ships by increasing initiative, 
         self.turn_order = [] 
         for init in range (max_init+1):
-            for ship in self.att_ship_list:
-                if (ship.init==init):
-                    self.turn_order.append (ship)
+            for id in range(len(self.att_ship_list)):
+                if (self.att_ship_list[id].init==init):
+                    self.turn_order.append ( ("att", id) )
             # range defense ship afterward so that they shoot first in case of a tie
-            for ship in self.def_ship_list:
-                if (ship.init==init):
-                    self.turn_order.append (ship)
+            for id in range(len(self.def_ship_list)):
+                if (self.def_ship_list[id].init==init):
+                    self.turn_order.append ( ("def", id) )
         #step3: compute transition table 
         self.transitionTable()
 
         #step 4: propagate win chance backward (=in increasing number hit points)
-        not_done = True
         index = [-1] #initialize index at -1 0 ... 0
         for _ in range (len(self.att_ships) + len(self.def_ships)):
             index += [0]
         all_ships = self.att_ships + self.def_ships
-        while (not_done):
+
+        total_ship_states = 1 # number of hp combinations
+        for ship in (self.att_ship_list+ self.def_ship_list):
+            total_ship_states *= blockSize (ship.numb, ship.hull)
+        
+        for _ in range (total_ship_states):
             self.computeWinChance (index)
 
-            not_done = False
             for ship in range (len(self.att_ships) + len(self.def_ships)):
-                if (ship_types[ship]==ship_types[ship+1]):
-                    if (index[ship+1]<index[ship+2]):
-                        index[ship+1]+= 1
-                        not_done = True
-                        break
-                    else:
-                        index[ship+1] = 0
-                elif (all_ships[ship] - index[ship+1]>1):
+                if (all_ships[ship] - index[ship+1]>1):
                     index[ship+1]+= 1
-                    not_done = True
                     break
                 else:
-                    #reset all hp of that ship
-                    for prev_ship in range (ship, -1, -1):
-                        if ship_types[prev_ship]==ship_types[ship]:
-                            index[prev_ship+1]=0
-            
+                    index[ship+1] = 0
 
         # return win chance 
         start_index = []
@@ -254,7 +244,6 @@ class BattleWinChances:
                 cur_index[0] = turn
 
                 tuple = listToTuple (cur_index)
-                tuple += (Ellipsis,) # for both attacker and defender
 
                 self.state_win_chance[tuple] = 0.0
 
@@ -265,7 +254,6 @@ class BattleWinChances:
                 cur_index[0] = turn
 
                 tuple = listToTuple (cur_index)
-                tuple += (Ellipsis,) # for both attacker and defender
                 self.state_win_chance[tuple] = 1.0
 
         else :
@@ -307,60 +295,59 @@ class BattleWinChances:
 
                 cur_index[0] = turn-1
                 tuple = listToTuple (cur_index)
-                tuple += (0,)
                 win_chance += proba_full_miss*self.state_win_chance[tuple]
 
                 cur_index[0] = turn
                 tuple = listToTuple (cur_index)
-                tuple += (Ellipsis,)
 
                 self.state_win_chance[tuple] = win_chance
                 
 
 
-    def computeStateWinChance (self, ship_index) :
+    def computeStateWinChance (self, current_state) :
         # Writes and solves the win chance equation for the hp state for all round 
         # round number is added at the start of the index
-        #print (ship_index)
 
         turn_size = len (self.att_ship_list) + len (self.def_ship_list)
         # which ship is firing ?
-        cur_index = ship_index.copy()
-        turn = cur_index[0]
+        after_damage_state = current_state.copy()
+        turn = after_damage_state[0]
+
         if turn < turn_size :
-            cur_ship = self.turn_order[turn]
+            firing_ship_side = self.turn_order[turn          ][0]
+            firing_ship_id   = self.turn_order[turn          ][1]
         else:
             #missile round
-            cur_ship = self.turn_order[turn-turn_size]
+            firing_ship_side = self.turn_order[turn-turn_size][0]
+            firing_ship_id   = self.turn_order[turn-turn_size][1]
 
         # how many of them are alive ?
-        first_index = self.att_index #counting an attack ship
-        if cur_ship.side == "def":
+        
+        if firing_ship_side == "att":
+            first_index = self.att_index #counting an attack ship
+            ally_ships = self.att_ships
+        else:
             first_index = self.def_index #counting a defense ship
+            ally_ships = self.def_ships
 
-        alive = 0
-        for ind in cur_ship.indexes:
-            if ship_index[first_index+ind]>0:
-                alive +=1
+        firing_ship = ally_ships [firing_ship_id]
+
+        alive = self.graph_edges[first_index+firing_ship_id-1][0][current_state[first_index+firing_ship_id]]
 
         # what's next turn ?
         if turn == 0:
-            cur_index[0] = len (self.att_ship_list) + len (self.def_ship_list) -1
+            after_damage_state[0] = len (self.att_ship_list) + len (self.def_ship_list) -1
         else :
-            cur_index[0] = turn -1
+            after_damage_state[0] = turn -1
         
 
         sign = 1
-        max_chance = 0.0
         first_index = self.def_index #firing on defense ships
-        last_index  = len (cur_index)
-        tuple_end = (0,)
-        if cur_ship.side == "def":
+        last_index  = len (current_state)
+        if firing_ship_side == "def":
             sign =-1 #attack maximize winrate, defense minimize win rate
-            max_chance = -1.0
             first_index = self.att_index #firing on attack ships
             last_index  = self.def_index
-            tuple_end = (1,)
 
         if alive >0:
             win_chance = 0.0
@@ -368,54 +355,56 @@ class BattleWinChances:
             for _ in range (len(damages_per_result)-1 ): # for each dice result (last is full miss)
                 damages = damages_per_result[_]
                 proba = damages[0]
+                self_hits = damages [1] #TODO self hits
 
-                max_chance = 0.0 # reinitialize max chance
-                if cur_ship.side == "def":
-                    max_chance = -1.0
-
-                if cur_ship.type =="npc" :
-                    max_kill_score = 0      # max number of ship killed times their value (which corresponds to their size)
-                    min_dama_score = 100000 # min remaining HP of the biggest ship alive
-                    biggest_ship_prio = 0   # how large is the biggest ship alive
+                max_chance = -1.0*(firing_ship_side=='def')
                 
-                for assignment in range (1, len(damages)): # for each damage assignment
-                    
-                    dam = damages[assignment]
-                    for target_ship in range (len(dam)):
-                        cur_index [first_index + target_ship] = max(ship_index [first_index + target_ship] - dam[target_ship], 0)
-                    tuple = listToTuple (cur_index)
-                    tuple += tuple_end
-                    chance = self.state_win_chance [tuple]
 
-                    if cur_ship.type =="npc" :
-                        kill_score = 0 # number of ship killed times their value (which corresponds to their size)
-                        dama_score = 100000 # remaining HP of the biggest ship alive
-                        for i in range (first_index, last_index):
-                            if   (cur_index[i]==0): #ship dead T-T
-                                kill_score += self.ship_prios[i-1]
-                            elif (self.ship_prios[i-1]>=biggest_ship_prio):
-                                dama_score = cur_index[i]
-                                if (self.ship_prios[i-1]>biggest_ship_prio): #hit a higher priority ship, updating priority
-                                    biggest_ship_prio = self.ship_prios[i-1]
-                                    min_dama_score = 100000
-                                
-                        if   (kill_score> max_kill_score):
-                            max_kill_score = kill_score
-                            min_dama_score = dama_score
-                            max_chance = sign*chance
-                        elif (kill_score==max_kill_score)and(dama_score< min_dama_score):
-                            min_dama_score = dama_score
-                            max_chance = sign*chance
-                        elif (kill_score==max_kill_score)and(dama_score==min_dama_score):
-                            max_chance = max (max_chance, sign*chance)
-                    else :
-                        # just take the highest chance of winning
-                        max_chance = max (max_chance, sign*chance)
+                for assignment in range (2, len(damages)): # for each damage assignment
+
+                    prefix_tuple = listToTuple (after_damage_state[0:first_index])
+                    for _ in range (first_index, last_index):
+                        prefix_tuple = prefix_tuple + (slice(0,-1),)
+                    suffix_tuple = listToTuple (after_damage_state[last_index:])
+
+                    attainable_state_win_chance = self.state_win_chance [prefix_tuple + suffix_tuple]
+
+                    dam = damages[assignment]
+                    target_nb = 0
+                    for target_ship_id in range (first_index, last_index):
+
+                        # prefix_tuple = ()
+                        # for _ in range (first_index, target_ship_id):
+                        #     prefix_tuple = prefix_tuple + (slice(0,-1),)
+                        # suffix_tuple = listToTuple (after_damage_state[last_index:first_index])
+                        # for _ in range (target_ship_id+1, last_index):
+                        #     suffix_tuple = (slice(0,-1),) + suffix_tuple
+
+                        possible_states_after_salva = [current_state[target_ship_id]] #current hp index
+                        for die in range (4, 0, -1): #dice type in decreasing order
+                            for i in range (dam[target_nb*4+die-1]):
+                                possible_states_after_salva_2 = []
+                                for id in possible_states_after_salva:
+                                    possible_states_after_salva_2 += self.graph_edges[target_ship_id-first_index][die][id]
+                                # remove duplicates
+                                possible_states_after_salva = sortAndRemoveDuplicates (possible_states_after_salva_2)
+                        target_nb +=1
+
+                        #if (len(suffix_tuple)==0):
+                        attainable_state_win_chance = attainable_state_win_chance [np.array(possible_states_after_salva)] # this will select lines that correspond to states of the current target ship that are attainable with that salva
+                        #else:
+                        #    attainable_state_win_chance = attainable_state_win_chance [np.array(possible_states_after_salva), suffix_tuple]
+
+                    
+                    chance = max (sign*attainable_state_win_chance.flatten()) # TODO npc targetting
+                    max_chance = max (max_chance, chance)
+
+                    
                 win_chance += proba*sign*max_chance
         
             #print ("win chance =", sign*win_chance)
 
-            proba_full_miss = damages_per_result[len(damages_per_result)-1][0]
+            proba_full_miss = damages_per_result[-1][0]
         
         else:
             win_chance =0
@@ -441,20 +430,23 @@ class BattleWinChances:
 
 
         for turn in range (turn_size):
-            cur_ship = self.turn_order[turn]
+            firing_ship_side = self.turn_order[turn][0]
+            firing_ship_id   = self.turn_order[turn][1]
 
-            if (cur_ship.side =="att"):
+            if (firing_ship_side =="att"):
                 target_list = self.def_ship_list
                 target_hp = self.def_ships
+                firing_ship = self.att_ship_list[firing_ship_id]
             else :
                 target_list = self.att_ship_list
                 target_hp = self.att_ships
+                firing_ship = self.def_ship_list[firing_ship_id]
 
             nb_targets = len(target_hp)
 
             target_hit_chance = []
             for target_ship in target_list:
-                target_hit_chance.append(hitChance (cur_ship.comp, target_ship.shie))
+                target_hit_chance.append(hitChance (firing_ship.comp, target_ship.shie))
                 
             #count how many outcomes there. At least 2 (hit or miss) but there might be different shields
             nb_outcomes = 0
@@ -470,10 +462,9 @@ class BattleWinChances:
                         proba_outcomes += [i - last_i]
                         last_i = i
 
-                        for target_ship in target_list:
-                            if hitChance (cur_ship.comp, target_ship.shie) == i:
-                                for index in target_ship.indexes:
-                                    can_hit [index] = nb_outcomes
+                        for target_ship_id in range (len(target_list)):
+                            if hitChance (firing_ship.comp, target_list[target_ship_id].shie) == i:
+                                can_hit [target_ship_id] = nb_outcomes
 
                         break
 
@@ -484,13 +475,13 @@ class BattleWinChances:
 
             damages_per_alive = [] #list where 1st element is for 1 alive ship, 2nd for 2 alive ships and so on
             damages_per_alive_missiles = []
-            for alive in range (1, cur_ship.numb+1):
+            for alive in range (1, firing_ship.numb+1):
                 # canon round
-                dice = alive * cur_ship.canon_array
+                dice = alive * firing_ship.canon_array
                 damages_per_alive.append (self.possibleResultsOfDice (dice, proba_log_outcomes, target_hp, can_hit))
 
                 # missile round
-                dice = alive * cur_ship.missi_array
+                dice = alive * firing_ship.missi_array
                 damages_per_alive_missiles.append (self.possibleResultsOfDice (dice, proba_log_outcomes, target_hp, can_hit))
 
             self.transition_table.append (damages_per_alive)
@@ -515,8 +506,7 @@ class BattleWinChances:
         total_possibilities = 1 #total results of the dice
 
         for die_type in range (4): #todo rift
-            total_possibilities*= totalPossibilities (dice[die_type], nb_outcomes)
-        #print ("total_possibilities =", total_possibilities)
+            total_possibilities*= blockSize (nb_outcomes, dice[die_type]-1) #POSSIBLEBUG
 
         # range all results 
         result = [0 for _ in range (4*nb_outcomes)] # nb_outcomes for each of the 4 die type
@@ -561,7 +551,6 @@ class BattleWinChances:
 
             unassigned_result = result.copy()
 
-
             assignements = [0 for i in range (4*nb_outcomes*nb_targets)] # for each result type, there is one cell for each ship
             while (not_done):
                 not_done = False
@@ -580,215 +569,98 @@ class BattleWinChances:
                 if una==0:
                     #print (assignements)
                     #compute damage corresponding to assignement
-                    overkill = False #checks whether a ship was assigned a dice after already being dead
-                    all_dead = True #checks whether all ships are dead (in which case overkill is fine)
-                    damage =[0 for i in range (nb_targets)]
+                    damage =[0 for i in range (4*nb_targets)] # the 4 first cells are the number of 1, 2, 3 and 4 taken by the first ship and so on
                     for i in range (4*nb_outcomes*nb_targets):
-                        if (damage[i%nb_targets] == target_hp[i%nb_targets]-1)and(assignements[i]>0): #assigning dice to a ship that's already dead
-                            overkill = True
-                        damage[i%nb_targets]+= (i//(nb_outcomes*nb_targets)+1) * assignements[i]
-                        if (damage[i%nb_targets] >= target_hp[i%nb_targets]-1):
-                            damage[i%nb_targets] = target_hp[i%nb_targets]-1
-                        else:
-                            all_dead = False
+                        for j in range (nb_targets):
+                            damage[i]+= assignements[i*nb_outcomes+j] #POSSIBLEBUG
                     #print (damage)
-                    if (overkill==False)or(all_dead==True): #TODO remove
-                        damage = listToTuple (damage)
-                        damages.append (damage)
-            
-            #remove duplicates
-            damages = list(dict.fromkeys(damages))
+                    damage = listToTuple (damage)
+                    damages.append (damage)
 
-            damages = [proba] + damages
+            damages = [proba] + [0] + damages #TODO: second is self hits
 
             damages_per_result.append (damages)
 
         return (damages_per_result)
     
-    def computeExpectancy(self, ship_index):
-        turn_size = len (self.att_ship_list) + len (self.def_ship_list)
-        
 
-        #check whether there is at least 1 ship alive
-        att_hp =0
-        def_hp =0
-        for i in range (self.att_index, self.def_index ):
-            att_hp += ship_index[i]
-        for i in range (self.def_index, len(ship_index)):
-            def_hp += ship_index[i]
-        if   (att_hp==0) :
-            #attacker lost, counting remaining def ships
-            for turn in range (2*turn_size):
-                cur_index = ship_index.copy ()
-                cur_index[0] = turn
+def blockSize (nb_ships, hull):
+    #computes the size of a state block for given number of ships and hull
+    block = 1
+    for i in range (1, nb_ships+1):
+        block = (block*(hull+1+i))//i
+    return (block)
 
-                self.def_win_chance += self.state_expectancy[listToTuple (cur_index)]
+def makeGraph (nb_ships, hull, print_tables=False):
+    # makes 5 table which, for each index, says how many ships are alive, 
+    # 0: how many ships are alive
+    # i: lists the state you can reach by taking i damages
+    hp_to_id = {}
+    id_to_hp = []
+    #step 0: enumerate all states, build lookup tables
+    hp = [0 for i in range (nb_ships)]
 
-                # count how many ships are still alive
-                for ship in range (len(ship_index)-1):
-                    if ship_index[ship+1]>0:
-                        self.still_alive[ship]+=self.state_expectancy[listToTuple (cur_index)]
-
-        elif (def_hp==0) :
-            #attacker won, counting remaining att ships
-            for turn in range (2*turn_size):
-                cur_index = ship_index.copy ()
-                cur_index[0] = turn
-
-                self.att_win_chance += self.state_expectancy[listToTuple (cur_index)]
-
-                # count how many ships are still alive
-                for ship in range (len(ship_index)-1):
-                    if ship_index[ship+1]>0:
-                        self.still_alive[ship]+=self.state_expectancy[listToTuple (cur_index)]
-
-        else :
-            # step 1 : propagate expectancy of missile rounds
-            for turn in range (2*turn_size-1, turn_size-1, -1):
-                cur_index = ship_index.copy()
-                cur_index[0] = turn
-                self.propagateStateExpectancy(cur_index, full_miss=True )
-            # step 2 : compute expectancy of canon rounds by solving a linear system
-            # because canon rounds loop back on themselves, the expectancy of the entire round are defined implicitly as solution of a linear system
-            A = np.zeros ((turn_size, turn_size))
-            b = np.zeros ( turn_size )
-            
-
-            for turn in range (turn_size):
-                cur_index = ship_index.copy ()
-                cur_index[0] = turn
-                (win_chance, proba_full_miss) = self.computeStateWinChance (cur_index) # TODO upgrade
-                b[turn] = self.state_expectancy[listToTuple(cur_index)]
-                A[turn, turn] = 1
-                
-                if (turn == 0):
-                    A[turn, turn_size-1] =-proba_full_miss
-                else :
-                    A[turn, turn     -1] =-proba_full_miss
-            #x = np.linalg.solve(A, b)
-            x = np.linalg.solve(np.transpose(A), b)
-            for turn in range (turn_size):
-                cur_index = ship_index.copy ()
-                cur_index[0] = turn
-
-                self.state_expectancy[listToTuple (cur_index)] = x[turn]
-
-            # step 3 : propagate expectancy of canon rounds 
-            for turn in range (turn_size):
-                cur_index = ship_index.copy()
-                cur_index[0] = turn
-                self.propagateStateExpectancy(cur_index, full_miss=False)
-        return
-    
-    def propagateStateExpectancy (self, ship_index, full_miss) :
-        # Ranges all dice results and propagates expectancy through it
-
-        turn_size = len (self.att_ship_list) + len (self.def_ship_list)
-        # which ship is firing ?
-        cur_index = ship_index.copy()
-        turn = cur_index[0]
-        if turn < turn_size :
-            cur_ship = self.turn_order[turn]
-        else:
-            #missile round
-            cur_ship = self.turn_order[turn-turn_size]
-
-        # how many of them are alive ?
-        first_index = self.att_index #counting an attack ship
-        if cur_ship.side == "def":
-            first_index = self.def_index #counting a defense ship
-
+    for id in range (blockSize(nb_ships, hull)):
+        id_to_hp.append (listToTuple ( hp ))
+        hp_to_id[listToTuple ( hp )]=id
+        for ship in range (nb_ships-1, -1, -1):
+            if (hp[ship] < hull+1):
+                hp[ship]+=1
+                for ship2 in range (ship, nb_ships):
+                    hp[ship2] = hp[ship]
+                break
+    #step 1: count how many ships are alive
+    alive_ships = []
+    for hp in id_to_hp:
         alive = 0
-        for ind in cur_ship.indexes:
-            if ship_index[first_index+ind]>0:
-                alive +=1
+        for ship in range (nb_ships):
+            alive += (hp[ship]>0)
+        alive_ships.append(alive)
+    #step 2: compute damage neighbors
+    bunch_of_lists =[alive_ships]
+    for die in range (1, 5):
+        neighbor_list = []
+        for id in range(len(id_to_hp)):
+            hp = id_to_hp[id]
+            neighbors = []
+            for ship in range (nb_ships): #put damage to any ship
+                hp2 = tupleToList(hp)
+                hp2[ship]=max(hp2[ship]-die, 0)
+                hp2.sort () # sort ships by increasing hp
+                neighbors.append(hp_to_id[listToTuple ( hp2 )])
+            neighbors = sortAndRemoveDuplicates (neighbors) 
+            if (neighbors[-1]==id)and(id>0): #remove current index
+                neighbors.pop ()
+            neighbor_list.append (neighbors)
+        bunch_of_lists.append(neighbor_list)
 
-        # what's next turn ?
-        if turn == 0:
-            cur_index[0] = len (self.att_ship_list) + len (self.def_ship_list) -1
-        else :
-            cur_index[0] = turn -1
-        
+    if (print_tables):
+        for id in range(len(id_to_hp)):
+            print (id, id_to_hp[id], "alive=", bunch_of_lists[0][id], "neighbors 1d", bunch_of_lists[1][id], "2d", bunch_of_lists[2][id], "3d", bunch_of_lists[3][id], "4d", bunch_of_lists[4][id])
 
-        sign = 1
-        first_index = self.def_index #firing on defense ships
-        last_index  = len (cur_index)
-        tuple_end = (0,)
-        if cur_ship.side == "def":
-            sign =-1 #attack maximize winrate, defense minimize win rate
-            first_index = self.att_index #firing on attack ships
-            last_index  = self.def_index
-            tuple_end = (1,)
-
-        if alive >0:
-            damages_per_result = self.transition_table [turn][alive-1] # list of outcomes with each a proba and all possible damage assignements
-            for _ in range (len(damages_per_result)-(full_miss==False) ): # for each dice result. Last result is full miss and only encountered with missile rounds
-                damages = damages_per_result[_]
-                proba = damages[0]
-
-                max_chance =-2.0 # reinitialize max chance
-
-                if cur_ship.type =="npc" :
-                    max_kill_score = 0      # max number of ship killed times their value (which corresponds to their size)
-                    min_dama_score = 100000 # min remaining HP of the biggest ship alive
-                    biggest_ship_prio = 0   # how large is the biggest ship alive
-                
-                for assignment in range (1, len(damages)): # for each damage assignment
-                    
-                    dam = damages[assignment]
-                    for target_ship in range (len(dam)):
-                        cur_index [first_index + target_ship] = max(ship_index [first_index + target_ship] - dam[target_ship], 0)
-                    tuple = listToTuple (cur_index)
-                    tuple += tuple_end
-                    chance = self.state_win_chance [tuple]
-
-                    if cur_ship.type =="npc" :
-                        kill_score = 0 # number of ship killed times their value (which corresponds to their size)
-                        dama_score = 100000 # remaining HP of the biggest ship alive
-                        for i in range (first_index, last_index):
-                            if   (cur_index[i]==0): #ship dead T-T
-                                kill_score += self.ship_prios[i-1]
-                            elif (self.ship_prios[i-1]>=biggest_ship_prio):
-                                dama_score = cur_index[i]
-                                if (self.ship_prios[i-1]>biggest_ship_prio): #hit a higher priority ship, updating priority
-                                    biggest_ship_prio = self.ship_prios[i-1]
-                                    min_dama_score = 100000
-                                
-                        if   (kill_score> max_kill_score):
-                            max_kill_score = kill_score
-                            min_dama_score = dama_score
-                            max_chance = sign*chance
-                            best_index = cur_index.copy()
-                        elif (kill_score==max_kill_score)and(dama_score< min_dama_score):
-                            min_dama_score = dama_score
-                            max_chance = sign*chance
-                            best_index = cur_index.copy()
-                        elif (kill_score==max_kill_score)and(dama_score==min_dama_score):
-                            if (sign*chance>max_chance):
-                                max_chance = sign*chance
-                                best_index = cur_index.copy()
-                    else :
-                        # just take the highest chance of winning
-                        if (sign*chance>max_chance):
-                            max_chance = sign*chance
-                            best_index = cur_index.copy()
-
-                self.state_expectancy[listToTuple(best_index)]+=proba*self.state_expectancy[listToTuple(ship_index)]
-
-        return ()
+    return (bunch_of_lists)
 
 
-    def errorCheck (self):
-        # checks if value function and final state are coherent
-        error  = False
-        precision = 0.00000001
-        # test 1: value function and final state are coherent
-        if (abs(self.att_win_chance-self.initial_win_chance)>precision):
-            error = True 
-        # test 2: do atatck and defense win chacne add up to 100%
-        if (abs(self.att_win_chance+self.def_win_chance-1)>precision):
-            error = True 
-        return (error)
+
+
+def readStateIndex (index, nb_ships, hull):
+    #transforms a statetable index into the ship hps
+    nb_ships_with_hps = [0 for i in range (hull+1)]
+
+    for _ in range (index):
+        print (nb_ships_with_hps)
+        for hp in range (hull+1):
+            if (nb_ships_with_hps[hp] < nb_ships):
+                nb_ships_with_hps[hp]+=1
+                break
+            else:
+                nb_ships_with_hps[hp] =0
+
+    return (nb_ships_with_hps)
+
+
+
+
 
 def totalPossibilities (nb_dice, nb_outcomes):
     if   (nb_outcomes == 1):
@@ -822,6 +694,7 @@ def hitChance (att_computer, def_shield):
     return (hit_chance)
 
 if __name__ == '__main__':
+    #makeGraph(3, 3, print_tables=True)
 
     # type, number, init, hull, computer, shield, canons, missiles
     interceptor= Ship("int", 2, 3, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
@@ -834,16 +707,16 @@ if __name__ == '__main__':
     if (True):
         eridan1 = Ship("cru", 2, 2, 3, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
         eridan2 = Ship("cru", 2, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
-        ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+        ancient = Ship("npc", 2, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
 
-        test = BattleWinChances ([eridan1], [ancient], remaining_ships=True)
-        test = BattleWinChances ([eridan2], [ancient], remaining_ships=True)
+        test = BattleWinChances ([eridan1], [ancient]); print (test.initial_win_chance)
+        #test = BattleWinChances ([eridan2], [ancient]); print (test.initial_win_chance)
 
         #plt.show()
 
-    npc_dam_test = True
-    missile_test = True
-    perform_test = True
+    npc_dam_test = False
+    missile_test = False
+    perform_test = False
 
     if (npc_dam_test):
 
@@ -865,7 +738,6 @@ if __name__ == '__main__':
         print ("1 dummy dre + 1 cru VS ancient WITH NPC RULE  (should be equal to  above)")
         test = BattleWinChances ([dum_dre, cruiser], [ancient]); print (test.initial_win_chance)
         print ("1 cru w 6 more hull VS ancient                (should be equal to  above)")
-
         cruiser = Ship("cru", 1, 2, 8, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
         test = BattleWinChances ([         cruiser], [ancient]); print (test.initial_win_chance)
 
