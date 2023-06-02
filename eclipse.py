@@ -358,7 +358,12 @@ class BattleWinChances:
                 self_hits = damages [1] #TODO self hits
 
                 max_chance = -1.0*(firing_ship_side=='def')
-                
+
+
+                # if the following two flag are True, then shot are going into the wrong ships
+                wasted_shot_flag = False #tells if a shot went into a dead ship
+                alive_ships_flag = False #tells if there is at least one enemy ship alive
+
 
                 for assignment in range (2, len(damages)): # for each damage assignment
 
@@ -368,30 +373,34 @@ class BattleWinChances:
                     target_nb = 0
                     for target_ship_id in range (first_index, last_index):
 
-                        # prefix_tuple = ()
-                        # for _ in range (first_index, target_ship_id):
-                        #     prefix_tuple = prefix_tuple + (slice(0,-1),)
-                        # suffix_tuple = listToTuple (after_damage_state[last_index:first_index])
-                        # for _ in range (target_ship_id+1, last_index):
-                        #     suffix_tuple = (slice(0,-1),) + suffix_tuple
-
                         possible_states_after_salva = [current_state[target_ship_id]] #current hp index
-                        for die in range (4, 0, -1): #dice type in decreasing order
-                            for i in range (dam[target_nb*4+die-1]):
-                                possible_states_after_salva_2 = []
-                                for id in possible_states_after_salva:
-                                    possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id]
-                                # remove duplicates
-                                possible_states_after_salva = sortAndRemoveDuplicates (possible_states_after_salva_2)
+
+                        if (current_state[target_ship_id]==0):
+                            #all those ships are dead
+                            for die in range (4, 0, -1): #check if they got hit regardless
+                                if (dam[target_nb*4+die-1]>0):
+                                    wasted_shot_flag = True #tells if a shot went into a dead ship
+
+                        else:
+                            alive_ships_flag = True
+                            
+                            for die in range (4, 0, -1): #dice type in decreasing order
+                                for i in range (dam[target_nb*4+die-1]):
+                                    possible_states_after_salva_2 = []
+                                    for id in possible_states_after_salva:
+                                        possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id]
+                                    # remove duplicates
+                                    possible_states_after_salva = sortAndRemoveDuplicates (possible_states_after_salva_2)
                         target_nb +=1
                         attainable_states.append(possible_states_after_salva)
 
 
                     attainable_states+= [ [i] for i in after_damage_state[last_index:]]
                     chance = max (sign*self.state_win_chance[np.ix_(*attainable_states)].flatten()) # TODO npc targetting
-                    max_chance = max (max_chance, chance)
+                    if (wasted_shot_flag==False)or(alive_ships_flag==False):
+                        max_chance = max (max_chance, chance)
 
-                    
+                
                 win_chance += proba*sign*max_chance
         
             #print ("win chance =", sign*win_chance)
@@ -546,26 +555,30 @@ class BattleWinChances:
             assignements = [0 for i in range (4*nb_outcomes*nb_targets)] # for each result type, there is one cell for each ship
             while (not_done):
                 not_done = False
-                for i in range (4*nb_outcomes*nb_targets):
-                    if (unassigned_result[i//nb_targets] >=1)and((i//nb_targets)%nb_outcomes < can_hit[i%nb_targets]): #if any dice left, increment hit value
-                        assignements[i]+=1
-                        unassigned_result[i//nb_targets]-=1
-                        not_done = True
-                        break
-                    else:
-                        unassigned_result[i//nb_targets]+=assignements[i]
-                        assignements[i]=0 #reinitialize
+                for target in range (nb_targets):
+                    for die in range (4):
+                        for outcome in range (nb_outcomes):
+                            i = (target*4 + die)*nb_outcomes + outcome
+                            if (not_done==False):
+                                if (unassigned_result[die*nb_outcomes + outcome] >=1)and(outcome < can_hit[target]): #if any dice left, increment hit value
+                                    assignements[i]+=1
+                                    unassigned_result[die*nb_outcomes + outcome]-=1
+                                    not_done = True
+                                else:
+                                    unassigned_result[die*nb_outcomes + outcome]+=assignements[i]
+                                    assignements[i]=0 #reinitialize
+
                 una = 0 #number of unassigned dice
                 for res in unassigned_result:
                     una += res
                 if una==0:
-                    #print (assignements)
                     #compute damage corresponding to assignement
                     damage =[0 for i in range (4*nb_targets)] # the 4 first cells are the number of 1, 2, 3 and 4 taken by the first ship and so on
-                    for i in range (4*nb_outcomes*nb_targets):
-                        for j in range (nb_outcomes):
-                            damage[i]+= assignements[i*nb_outcomes+j] #POSSIBLEBUG
-                    #print (damage)
+                    for target in range (nb_targets):
+                        for die in range (4):
+                            for outcome in range (nb_outcomes):
+                                damage[target*4 + die]+= assignements[(target*4+die)*nb_outcomes+outcome]
+
                     damage = listToTuple (damage)
                     damages.append (damage)
 
@@ -663,7 +676,7 @@ if __name__ == '__main__':
     #test = BattleWinChances ([interceptor, dreadnought], [cruiser])
 
 
-    if (True):
+    if (False):
         eridan1 = Ship("cru", 2, 2, 3, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
         eridan2 = Ship("cru", 2, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
         ancient = Ship("npc", 2, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
@@ -675,7 +688,7 @@ if __name__ == '__main__':
 
     npc_dam_test = True
     missile_test = True
-    perform_test = True
+    perform_test = False
 
     if (npc_dam_test):
 
@@ -687,7 +700,7 @@ if __name__ == '__main__':
         ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
         anfalse = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
         print ("              1 cru VS ancient                  ")
-        test = BattleWinChances ([         cruiser], [ancient]); print (test.initial_win_chance)
+        #test = BattleWinChances ([         cruiser], [ancient]); print (test.initial_win_chance)
         print ("6 dummy int + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
         test = BattleWinChances ([dum_int, cruiser], [anfalse]); print (test.initial_win_chance)
         print ("1 dummy dre + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
@@ -756,6 +769,17 @@ if __name__ == '__main__':
             test = BattleWinChances ([int_att], [sba_def]) #, sba_def])
             toc = time.perf_counter()
             print(f"Solved in {toc - tic:0.4f} seconds")
+
+        #print ("Pain test 9: 8 int + 4cru vs 4 cru + 2 dre + 4 sba") 
+        #int_att = Ship("int", 8, 3, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
+        #cru_att = Ship("cru", 4, 2, 1, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
+        #sba_def = Ship("sba", 4, 4, 2, 1, 0, [1,0,0,0,0], [0,2,0,0,0])
+        #cru_def = Ship("cru", 4, 2, 1, 1, 0, [1,0,0,0,0], [0,0,0,0,0])
+        #dre_def = Ship("dre", 2, 1, 2, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+        #tic = time.perf_counter()
+        #test = BattleWinChances ([int_att, cru_att], [sba_def, cru_def, dre_def]) #, sba_def])
+        #toc = time.perf_counter()
+        #print(f"Solved in {toc - tic:0.4f} seconds")
 
 
     plt.show ()
