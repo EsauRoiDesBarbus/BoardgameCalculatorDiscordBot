@@ -242,19 +242,14 @@ class BattleWinChances:
             for turn in range (2*turn_size):
                 cur_index = ship_index.copy ()
                 cur_index[0] = turn
-
-                tuple = listToTuple (cur_index)
-
-                self.state_win_chance[tuple] = 0.0
+                self.state_win_chance[listToTuple (cur_index)] = 0.0
 
         elif (def_hp==0) :
             #attacker won
             for turn in range (2*turn_size):
                 cur_index = ship_index.copy ()
                 cur_index[0] = turn
-
-                tuple = listToTuple (cur_index)
-                self.state_win_chance[tuple] = 1.0
+                self.state_win_chance[listToTuple (cur_index)] = 1.0
 
         else :
             # step 1: compute chance of canon rounds
@@ -325,12 +320,14 @@ class BattleWinChances:
         
         if firing_ship_side == "att":
             first_index = self.att_index #counting an attack ship
-            ally_ships = self.att_ships
+            ally_ship_list = self.att_ship_list
+            enmy_ship_list = self.def_ship_list
         else:
             first_index = self.def_index #counting a defense ship
-            ally_ships = self.def_ships
+            ally_ship_list = self.def_ship_list
+            enmy_ship_list = self.att_ship_list
 
-        firing_ship = ally_ships [firing_ship_id]
+        firing_ship = ally_ship_list [firing_ship_id]
 
         alive = self.graph_edges[first_index+firing_ship_id-1][0][current_state[first_index+firing_ship_id]]
 
@@ -349,6 +346,10 @@ class BattleWinChances:
             first_index = self.att_index #firing on attack ships
             last_index  = self.def_index
 
+        npc_flag = False # tells whether we need to use npc targeting rule
+        if firing_ship.type=="npc":
+            npc_flag = True
+
         if alive >0:
             win_chance = 0.0
             damages_per_result = self.transition_table [turn][alive-1] # list of outcomes with each a proba and all possible damage assignements
@@ -357,20 +358,28 @@ class BattleWinChances:
                 proba = damages[0]
                 self_hits = damages [1] #TODO self hits
 
-                max_chance = -1.0*(firing_ship_side=='def')
+                max_chance = -1000.0
 
 
-                # if the following two flag are True, then shot are going into the wrong ships
-                wasted_shot_flag = False #tells if a shot went into a dead ship
-                alive_ships_flag = False #tells if there is at least one enemy ship alive
 
+                BIG = 100000 # number that is much bigger than any number encoutered in the following part
+
+                min_kill_score = BIG # npc targeting : counts how many ships are dead, weighted by their prio
+                min_hull_score = BIG # npc targeting : counts how much hull the biggest ship alive has
 
                 for assignment in range (2, len(damages)): # for each damage assignment
+                    # if the following two flag are True, then shot are going into the wrong ships
+                    wasted_shot_flag = False #tells if a shot went into a dead ship
+                    alive_ships_flag = False #tells if there is at least one enemy ship alive
 
                     attainable_states = [ [i] for i in after_damage_state[0:first_index]]
 
                     dam = damages[assignment]
                     target_nb = 0
+                    kill_score = 0
+                    hull_score = BIG
+                    max_prio = 0 # npc targeting : priority of the biggest ship
+                
                     for target_ship_id in range (first_index, last_index):
 
                         possible_states_after_salva = [current_state[target_ship_id]] #current hp index
@@ -387,24 +396,48 @@ class BattleWinChances:
                             for die in range (4, 0, -1): #dice type in decreasing order
                                 for i in range (dam[target_nb*4+die-1]):
                                     possible_states_after_salva_2 = []
-                                    for id in possible_states_after_salva:
-                                        possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id]
+                                    if npc_flag:
+                                        for id in possible_states_after_salva:
+                                            possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id][0:1] # neighbor list are sorted so that the first element correspond to npc targeting
+                                    else:
+                                        for id in possible_states_after_salva:
+                                            possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id] 
                                     # remove duplicates
                                     possible_states_after_salva = sortAndRemoveDuplicates (possible_states_after_salva_2)
-                        target_nb +=1
+                        
                         attainable_states.append(possible_states_after_salva)
-
+                        if npc_flag:
+                            alive_targets = self.graph_edges[target_ship_id-1][0][possible_states_after_salva[0]]
+                            prio = enmy_ship_list[target_nb].prio
+                            kill_score+= alive_targets*prio
+                            hull= self.graph_edges[target_ship_id-1][5][possible_states_after_salva[0]] # hp of the most damaged ship among the alive ships of that type
+                            if (hull>0)and(prio>max_prio):
+                                max_prio = prio
+                                hull_score = hull
+                        target_nb +=1
 
                     attainable_states+= [ [i] for i in after_damage_state[last_index:]]
-                    chance = max (sign*self.state_win_chance[np.ix_(*attainable_states)].flatten()) # TODO npc targetting
-                    if (wasted_shot_flag==False)or(alive_ships_flag==False):
+                    chance = max (sign*self.state_win_chance[np.ix_(*attainable_states)].flatten())
+                    if (npc_flag):
+                        if   (kill_score < min_kill_score):
+                            min_kill_score = kill_score
+                            min_hull_score = hull_score
+                            max_chance = chance
+                        elif (kill_score==min_kill_score)and(hull_score < min_hull_score):
+                            min_hull_score = hull_score
+                            max_chance = chance
+                        elif (kill_score==min_kill_score)and(hull_score==min_hull_score):
+                            #print ("shouldnt happen")
+                            max_chance = max (max_chance, chance)
+
+                    elif (wasted_shot_flag==False)or(alive_ships_flag==False):
                         max_chance = max (max_chance, chance)
 
                 
                 win_chance += proba*sign*max_chance
         
             #print ("win chance =", sign*win_chance)
-
+            
             proba_full_miss = damages_per_result[-1][0]
         
         else:
@@ -602,7 +635,7 @@ def makeGraph (nb_ships, hull, print_tables=False):
     # i: lists the state you can reach by taking i damages
     hp_to_id = {}
     id_to_hp = []
-    #step 0: enumerate all states, build lookup tables
+    #step-1: enumerate all states, build lookup tables
     hp = [0 for i in range (nb_ships)]
 
     for id in range (blockSize(nb_ships, hull)):
@@ -614,14 +647,14 @@ def makeGraph (nb_ships, hull, print_tables=False):
                 for ship2 in range (ship, nb_ships):
                     hp[ship2] = hp[ship]
                 break
-    #step 1: count how many ships are alive
+    #step 0: count how many ships are alive
     alive_ships = []
     for hp in id_to_hp:
         alive = 0
         for ship in range (nb_ships):
             alive += (hp[ship]>0)
         alive_ships.append(alive)
-    #step 2: compute damage neighbors
+    #step 1-4: compute damage neighbors
     bunch_of_lists =[alive_ships]
     for die in range (1, 5):
         neighbor_list = []
@@ -638,10 +671,20 @@ def makeGraph (nb_ships, hull, print_tables=False):
                 neighbors.pop ()
             neighbor_list.append (neighbors)
         bunch_of_lists.append(neighbor_list)
+    #step 5: compute the hp of the most damaged ship  among the ships that are still alive (if all dead, then 0)
+    damage_list = []
+    for hp in id_to_hp:
+        damage = 0
+        for ship in range (nb_ships):
+            if hp[ship]>0:
+                damage = hp[ship]
+                break # the most damaged ship is the first encountered
+        damage_list.append(damage)
+    bunch_of_lists.append(damage_list)
 
     if (print_tables):
         for id in range(len(id_to_hp)):
-            print (id, id_to_hp[id], "alive=", bunch_of_lists[0][id], "neighbors 1d", bunch_of_lists[1][id], "2d", bunch_of_lists[2][id], "3d", bunch_of_lists[3][id], "4d", bunch_of_lists[4][id])
+            print (id, id_to_hp[id], "alive=", bunch_of_lists[0][id], "damage=", bunch_of_lists[5][id], "neighbors 1d", bunch_of_lists[1][id], "2d", bunch_of_lists[2][id], "3d", bunch_of_lists[3][id], "4d", bunch_of_lists[4][id])
 
     return (bunch_of_lists)
  
@@ -676,7 +719,7 @@ if __name__ == '__main__':
     #test = BattleWinChances ([interceptor, dreadnought], [cruiser])
 
 
-    if (False):
+    if (True):
         eridan1 = Ship("cru", 2, 2, 3, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
         eridan2 = Ship("cru", 2, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
         ancient = Ship("npc", 2, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
@@ -700,7 +743,7 @@ if __name__ == '__main__':
         ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
         anfalse = Ship("cru", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
         print ("              1 cru VS ancient                  ")
-        #test = BattleWinChances ([         cruiser], [ancient]); print (test.initial_win_chance)
+        test = BattleWinChances ([         cruiser], [ancient]); print (test.initial_win_chance)
         print ("6 dummy int + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
         test = BattleWinChances ([dum_int, cruiser], [anfalse]); print (test.initial_win_chance)
         print ("1 dummy dre + 1 cru VS ancient OPTIMAL DAMAGE (should be equal to  above)")
@@ -752,7 +795,7 @@ if __name__ == '__main__':
 
         print ("2 int VS 2 int")
         test = BattleWinChances ([int_att         ], [int_def]); print (test.initial_win_chance)
-        print ("2 int + 1 cru with no canon VS 2 int")
+        print ("2 int + 1 dre with no canon VS 2 int")
         test = BattleWinChances ([int_att, dre_att], [int_def]); print (test.initial_win_chance)
 
         print (" ")
