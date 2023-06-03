@@ -347,8 +347,10 @@ class BattleWinChances:
             last_index  = self.def_index
 
         npc_flag = False # tells whether we need to use npc targeting rule
+        prio_list = []
         if firing_ship.type=="npc":
             npc_flag = True
+            prio_list = [ship.prio for ship in enmy_ship_list]
 
         if alive >0:
             win_chance = 0.0
@@ -358,82 +360,8 @@ class BattleWinChances:
                 proba = damages[0]
                 self_hits = damages [1] #TODO self hits
 
-                max_chance = -1000.0
+                max_chance, best_next_state = self.findBestAssignment (sign, after_damage_state, first_index, last_index, damages[2:], npc_flag, prio_list)
 
-
-
-                BIG = 100000 # number that is much bigger than any number encoutered in the following part
-
-                min_kill_score = BIG # npc targeting : counts how many ships are dead, weighted by their prio
-                min_hull_score = BIG # npc targeting : counts how much hull the biggest ship alive has
-
-                for assignment in range (2, len(damages)): # for each damage assignment
-                    # if the following two flag are True, then shot are going into the wrong ships
-                    wasted_shot_flag = False #tells if a shot went into a dead ship
-                    alive_ships_flag = False #tells if there is at least one enemy ship alive
-
-                    attainable_states = [ [i] for i in after_damage_state[0:first_index]]
-
-                    dam = damages[assignment]
-                    target_nb = 0
-                    kill_score = 0
-                    hull_score = BIG
-                    max_prio = 0 # npc targeting : priority of the biggest ship
-                
-                    for target_ship_id in range (first_index, last_index):
-
-                        possible_states_after_salva = [current_state[target_ship_id]] #current hp index
-
-                        if (current_state[target_ship_id]==0):
-                            #all those ships are dead
-                            for die in range (4, 0, -1): #check if they got hit regardless
-                                if (dam[target_nb*4+die-1]>0):
-                                    wasted_shot_flag = True #tells if a shot went into a dead ship
-
-                        else:
-                            alive_ships_flag = True
-                            
-                            for die in range (4, 0, -1): #dice type in decreasing order
-                                for i in range (dam[target_nb*4+die-1]):
-                                    possible_states_after_salva_2 = []
-                                    if npc_flag:
-                                        for id in possible_states_after_salva:
-                                            possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id][0:1] # neighbor list are sorted so that the first element correspond to npc targeting
-                                    else:
-                                        for id in possible_states_after_salva:
-                                            possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id] 
-                                    # remove duplicates
-                                    possible_states_after_salva = sortAndRemoveDuplicates (possible_states_after_salva_2)
-                        
-                        attainable_states.append(possible_states_after_salva)
-                        if npc_flag:
-                            alive_targets = self.graph_edges[target_ship_id-1][0][possible_states_after_salva[0]]
-                            prio = enmy_ship_list[target_nb].prio
-                            kill_score+= alive_targets*prio
-                            hull= self.graph_edges[target_ship_id-1][5][possible_states_after_salva[0]] # hp of the most damaged ship among the alive ships of that type
-                            if (hull>0)and(prio>max_prio):
-                                max_prio = prio
-                                hull_score = hull
-                        target_nb +=1
-
-                    attainable_states+= [ [i] for i in after_damage_state[last_index:]]
-                    chance = max (sign*self.state_win_chance[np.ix_(*attainable_states)].flatten())
-                    if (npc_flag):
-                        if   (kill_score < min_kill_score):
-                            min_kill_score = kill_score
-                            min_hull_score = hull_score
-                            max_chance = chance
-                        elif (kill_score==min_kill_score)and(hull_score < min_hull_score):
-                            min_hull_score = hull_score
-                            max_chance = chance
-                        elif (kill_score==min_kill_score)and(hull_score==min_hull_score):
-                            #print ("shouldnt happen")
-                            max_chance = max (max_chance, chance)
-
-                    elif (wasted_shot_flag==False)or(alive_ships_flag==False):
-                        max_chance = max (max_chance, chance)
-
-                
                 win_chance += proba*sign*max_chance
         
             #print ("win chance =", sign*win_chance)
@@ -446,7 +374,87 @@ class BattleWinChances:
 
         return (win_chance, proba_full_miss)
 
+    def findBestAssignment (self, sign, state, first_index, last_index, assignment_list, npc_flag=False, prio_list = []):
+        max_chance = -1000.0
+        best_next_state = state 
 
+        BIG = 100000 # number that is much bigger than any number encoutered in the following part
+
+        min_kill_score = BIG # npc targeting : counts how many ships are dead, weighted by their prio
+        min_hull_score = BIG # npc targeting : counts how much hull the biggest ship alive has
+
+        for dam in assignment_list: # for each damage assignment
+            # if the following two flag are True, then shot are going into the wrong ships
+            wasted_shot_flag = False #tells if a shot went into a dead ship
+            alive_ships_flag = False #tells if there is at least one enemy ship alive
+
+            attainable_states = [ [i] for i in state[0:first_index]]
+
+            target_nb = 0
+            kill_score = 0
+            hull_score = BIG
+            max_prio = 0 # npc targeting : priority of the biggest ship
+        
+            for target_ship_id in range (first_index, last_index):
+
+                possible_states_after_salva = [state[target_ship_id]] #current hp index
+
+                if (state[target_ship_id]==0):
+                    #all those ships are dead
+                    for die in range (4, 0, -1): #check if they got hit regardless
+                        if (dam[target_nb*4+die-1]>0):
+                            wasted_shot_flag = True #tells if a shot went into a dead ship
+
+                else:
+                    alive_ships_flag = True
+                    
+                    for die in range (4, 0, -1): #dice type in decreasing order
+                        for i in range (dam[target_nb*4+die-1]):
+                            possible_states_after_salva_2 = []
+                            if npc_flag:
+                                for id in possible_states_after_salva:
+                                    possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id][0:1] # neighbor list are sorted so that the first element correspond to npc targeting
+                            else:
+                                for id in possible_states_after_salva:
+                                    possible_states_after_salva_2 += self.graph_edges[target_ship_id-1][die][id] 
+                            # remove duplicates
+                            possible_states_after_salva = sortAndRemoveDuplicates (possible_states_after_salva_2)
+                
+                attainable_states.append(possible_states_after_salva)
+                if npc_flag:
+                    alive_targets = self.graph_edges[target_ship_id-1][0][possible_states_after_salva[0]]
+                    prio = prio_list[target_nb]
+                    kill_score+= alive_targets*prio
+                    hull= self.graph_edges[target_ship_id-1][5][possible_states_after_salva[0]] # hp of the most damaged ship among the alive ships of that type
+                    if (hull>0)and(prio>max_prio):
+                        max_prio = prio
+                        hull_score = hull
+                target_nb +=1
+
+            attainable_states+= [ [i] for i in state[last_index:]]
+            #chance = max (sign*self.state_win_chance[np.ix_(*attainable_states)].flatten())
+            attainable_state_win_chance = self.state_win_chance[np.ix_(*attainable_states)]
+            chance =     (sign*attainable_state_win_chance).max ()
+            next_state = (sign*attainable_state_win_chance).argmax ()
+            next_state = np.unravel_index (next_state, attainable_state_win_chance.shape)
+            next_state = [attainable_states[i][next_state[i]] for i in range (len(attainable_states))]
+            if (npc_flag):
+                if   (kill_score < min_kill_score):
+                    min_kill_score = kill_score
+                    min_hull_score = hull_score
+                    max_chance = chance
+                elif (kill_score==min_kill_score)and(hull_score < min_hull_score):
+                    min_hull_score = hull_score
+                    max_chance = chance
+                elif (kill_score==min_kill_score)and(hull_score==min_hull_score):
+                    max_chance = max (max_chance, chance)
+
+            elif (wasted_shot_flag==False)or(alive_ships_flag==False):
+                if (chance > max_chance):
+                    max_chance = chance
+                    best_next_state = next_state
+
+        return (max_chance, best_next_state)
 
 
     def transitionTable (self):
@@ -729,8 +737,8 @@ if __name__ == '__main__':
 
         #plt.show()
 
-    npc_dam_test = True
-    missile_test = True
+    npc_dam_test = False
+    missile_test = False
     perform_test = False
 
     if (npc_dam_test):
