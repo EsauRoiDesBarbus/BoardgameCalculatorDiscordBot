@@ -71,7 +71,7 @@ class Ship:
 
 
 class BattleWinChances:
-    def __init__ (self, attacker_ship_list, defender_ship_list, remaining_ships = False): 
+    def __init__ (self, attacker_ship_list, defender_ship_list, remaining_ships = True): 
         self.att_ship_list = attacker_ship_list
         self.def_ship_list = defender_ship_list
         # State of battle is one big array, with each coordinate corresponding to : 
@@ -160,65 +160,63 @@ class BattleWinChances:
             self.att_win_chance = 0.0 # to check results
             self.def_win_chance = 0.0 # to check results
             self.state_expectancy = np.zeros ( [2* size_round] + self.att_ships +self.def_ships ) # array with the probability of each state
-            start_index.pop ()
+
             self.state_expectancy[listToTuple(start_index)]=1.0 #initial state is guaranteed to happen
             index = start_index
 
-            self.still_alive = np.zeros (len(self.att_ships)+len(self.def_ships))
+            self.att_still_alive = [[0.0 for i in range (ship.numb)] for ship in self.att_ship_list]
+            self.def_still_alive = [[0.0 for i in range (ship.numb)] for ship in self.def_ship_list]
 
-            not_done = True
-            while (not_done):
+            for _ in range (total_ship_states):
                 self.computeExpectancy (index)
 
-                not_done = False
                 for ship in range (len(self.att_ships) + len(self.def_ships)):
-                    if (index[ship+1]>=1):
+                    if (index[ship+1]>0):
                         index[ship+1]-= 1
-                        not_done = True
-                        for prev_ship in range (ship-1, -1, -1):
-                            #reduce hp of all previous ships of the same type
-                            if ship_types[prev_ship]==ship_types[ship]:
-                                index[prev_ship+1]=index[ship+1]
                         break
                     else:
-                        #reset hp of that ship
-                        index[ship+1] = all_ships[ship] -1
+                        index[ship+1] = all_ships[ship]-1
 
             
             ship_names = [] # for legend
             xplacement = [] # place of the bar along the x axis
             bar_colors = [] # to differentiate att and def
             x_value = 1
-            for ship in attacker_ship_list:
-                for n in range (ship.numb):
-                    if (n==0):
-                        ship_names += [str(ship.numb-n) + " "  + ship.type ]
+            still_alive = []
+            for ship_id in range(len(self.att_ship_list)):
+                ship = self.att_ship_list[ship_id]
+                still_alive += self.att_still_alive [ship_id]
+                for n in range (1, ship.numb+1):
+                    if (n==ship.numb):
+                        ship_names += [str(n) + " "  + ship.type ]
                     else :
-                        ship_names += [str(ship.numb-n) + "+ " + ship.type ]
+                        ship_names += [str(n) + "+ " + ship.type ]
                     bar_colors += ["blue"]
                     xplacement += [x_value]
                     x_value += 1
                 x_value += 1
             x_value += 1
-            for ship in defender_ship_list:
-                for n in range (ship.numb):
-                    if (n==0):
-                        ship_names += [str(ship.numb-n) + " "  + ship.type ]
+            for ship_id in range(len(self.def_ship_list)):
+                ship = self.def_ship_list[ship_id]
+                still_alive += self.def_still_alive [ship_id]
+                for n in range (1, ship.numb+1):
+                    if (n==ship.numb):
+                        ship_names += [str(n) + " "  + ship.type ]
                     else :
-                        ship_names += [str(ship.numb-n) + "+ " + ship.type ]
+                        ship_names += [str(n) + "+ " + ship.type ]
                     bar_colors += ["red"]
                     xplacement += [x_value]
                     x_value += 1
                 x_value += 1
 
             fig, ax = plt.subplots()
-            bars = ax.bar(xplacement, self.still_alive, color = bar_colors)
+            bars = ax.bar(xplacement, still_alive, color = bar_colors)
 
             ax.set_xticks (xplacement)
             ax.set_xticklabels (ship_names)
             ax.set_yticks ([])
 
-            percentages = ["{:.2%}".format(p) for p in self.still_alive]
+            percentages = ["{:.2%}".format(p) for p in still_alive]
 
             ax.bar_label(bars, percentages)
             ax.set_title ("Survival chance")
@@ -297,12 +295,8 @@ class BattleWinChances:
 
                 self.state_win_chance[tuple] = win_chance
                 
-
-
-    def computeStateWinChance (self, current_state) :
-        # Writes and solves the win chance equation for the hp state for all round 
-        # round number is added at the start of the index
-
+    def readStateInfo (self, current_state):
+        # reads and returns relevant information for state operations
         turn_size = len (self.att_ship_list) + len (self.def_ship_list)
         # which ship is firing ?
         after_damage_state = current_state.copy()
@@ -351,6 +345,13 @@ class BattleWinChances:
         if firing_ship.type=="npc":
             npc_flag = True
             prio_list = [ship.prio for ship in enmy_ship_list]
+        return (turn, sign, after_damage_state, first_index, last_index, alive, npc_flag, prio_list)
+
+    def computeStateWinChance (self, current_state) :
+        # Writes and solves the win chance equation for the hp state for all round 
+        # round number is added at the start of the index
+
+        turn, sign, after_damage_state, first_index, last_index, alive, npc_flag, prio_list = self.readStateInfo (current_state)
 
         if alive >0:
             win_chance = 0.0
@@ -363,8 +364,6 @@ class BattleWinChances:
                 max_chance, best_next_state = self.findBestAssignment (sign, after_damage_state, first_index, last_index, damages[2:], npc_flag, prio_list)
 
                 win_chance += proba*sign*max_chance
-        
-            #print ("win chance =", sign*win_chance)
             
             proba_full_miss = damages_per_result[-1][0]
         
@@ -443,19 +442,111 @@ class BattleWinChances:
                     min_kill_score = kill_score
                     min_hull_score = hull_score
                     max_chance = chance
+                    best_next_state = next_state
                 elif (kill_score==min_kill_score)and(hull_score < min_hull_score):
                     min_hull_score = hull_score
                     max_chance = chance
+                    best_next_state = next_state
                 elif (kill_score==min_kill_score)and(hull_score==min_hull_score):
-                    max_chance = max (max_chance, chance)
-
-            elif (wasted_shot_flag==False)or(alive_ships_flag==False):
-                if (chance > max_chance):
                     max_chance = chance
                     best_next_state = next_state
 
+            elif (wasted_shot_flag==False)or(alive_ships_flag==False):
+                if (chance >= max_chance):
+                    max_chance = chance
+                    best_next_state = next_state
+                    
         return (max_chance, best_next_state)
 
+    def computeExpectancy(self, turnless_state):
+        turn_size = len (self.att_ship_list) + len (self.def_ship_list)
+        
+        #check whether there is at least 1 ship alive
+        att_hp =0
+        def_hp =0
+        for i in range (self.att_index, self.def_index ):
+            att_hp += turnless_state[i]
+        for i in range (self.def_index, len(turnless_state)):
+            def_hp += turnless_state[i]
+        if   (att_hp==0) :
+            #attacker lost, counting remaining def ships
+            for turn in range (2*turn_size):
+                state = turnless_state.copy ()
+                state[0] = turn
+                self.def_win_chance += self.state_expectancy[listToTuple (state)]
+
+                # count how many ships are still alive
+                for ship_id in range (len(self.def_ship_list)):
+                    alive = self.graph_edges[self.def_index+ship_id-1][0][state[self.def_index+ship_id]]
+                    for i in range (alive):
+                        self.def_still_alive[ship_id][i]+=self.state_expectancy[listToTuple (state)]
+
+        elif (def_hp==0) :
+            #attacker won, counting remaining att ships
+            for turn in range (2*turn_size):
+                state = turnless_state.copy ()
+                state[0] = turn
+                self.att_win_chance += self.state_expectancy[listToTuple (state)]
+
+                # count how many ships are still alive
+                for ship_id in range (len(self.att_ship_list)):
+                    alive = self.graph_edges[self.att_index+ship_id-1][0][state[self.att_index+ship_id]]
+                    for i in range (alive):
+                        self.att_still_alive[ship_id][i]+=self.state_expectancy[listToTuple (state)]
+
+        else :
+            # step 1 : propagate expectancy of missile rounds
+            for turn in range (2*turn_size-1, turn_size-1, -1):
+                state = turnless_state.copy()
+                state[0] = turn
+                self.propagateStateExpectancy(state, full_miss=True )
+            # step 2 : compute expectancy of canon rounds by solving a linear system
+            # because canon rounds loop back on themselves, the expectancy of the entire round are defined implicitly as solution of a linear system
+            A = np.zeros ((turn_size, turn_size))
+            b = np.zeros ( turn_size )
+            
+
+            for turn in range (turn_size):
+                state = turnless_state.copy ()
+                state[0] = turn
+                (win_chance, proba_full_miss) = self.computeStateWinChance (state) # TODO upgrade
+                b[turn] = self.state_expectancy[listToTuple(state)]
+                A[turn, turn] = 1
+                
+                if (turn == 0):
+                    A[turn, turn_size-1] =-proba_full_miss
+                else :
+                    A[turn, turn     -1] =-proba_full_miss
+            #x = np.linalg.solve(A, b)
+            x = np.linalg.solve(np.transpose(A), b)
+            for turn in range (turn_size):
+                state = turnless_state.copy ()
+                state[0] = turn
+                self.state_expectancy[listToTuple (state)] = x[turn]
+
+            # step 3 : propagate expectancy of canon rounds 
+            for turn in range (turn_size):
+                state = turnless_state.copy()
+                state[0] = turn
+                self.propagateStateExpectancy(state, full_miss=False)
+        return
+    
+    def propagateStateExpectancy (self, current_state, full_miss) :
+        # Ranges all dice results and propagates expectancy through it
+
+        turn, sign, after_damage_state, first_index, last_index, alive, npc_flag, prio_list = self.readStateInfo (current_state)
+
+        if alive >0:
+            damages_per_result = self.transition_table [turn][alive-1] # list of outcomes with each a proba and all possible damage assignements
+            for _ in range (len(damages_per_result)-(full_miss==False) ): # for each dice result. Last result is full miss and only encountered with missile rounds
+                damages = damages_per_result[_]
+                proba = damages[0]
+
+                max_chance, best_next_state = self.findBestAssignment (sign, after_damage_state, first_index, last_index, damages[2:], npc_flag, prio_list)
+
+                self.state_expectancy[listToTuple(best_next_state)]+=proba*self.state_expectancy[listToTuple(current_state)]
+
+        return ()
 
     def transitionTable (self):
         # creates a transition table that represents thrown dice
