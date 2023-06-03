@@ -720,6 +720,18 @@ class BattleWinChances:
 
         return (damages_per_result)
     
+    def errorCheck (self):
+        # checks if value function and final state are coherent
+        error  = False
+        precision = 0.00000001
+        # test 1: value function and final state are coherent
+        if (abs(self.att_win_chance-self.initial_win_chance)>precision):
+            error = True 
+        # test 2: do atatck and defense win chacne add up to 100%
+        if (abs(self.att_win_chance+self.def_win_chance-1)>precision):
+            error = True 
+        return (error)
+    
 
 def blockSize (nb_ships, hull):
     #computes the size of a state block for given number of ships and hull
@@ -828,11 +840,12 @@ if __name__ == '__main__':
 
         #plt.show()
 
-    npc_dam_test = False
-    missile_test = False
-    perform_test = False
+    npc_dam_test = True
+    missile_test = True
+    perform_test = True
 
     if (npc_dam_test):
+        plt.close ()
 
         print ("NPC damage assignment tests")
 
@@ -870,6 +883,7 @@ if __name__ == '__main__':
         print (" ")
 
     if (missile_test):
+        plt.close ()
 
         print ("Missile test (should return 0.25)")
         int_def = Ship("int", 2, 2, 0, 0, 0, [1,0,0,0,0], [0,0,0,0,0])
@@ -900,6 +914,7 @@ if __name__ == '__main__':
         print (" ")
 
     if (perform_test):
+        plt.close ()
 
         for i in range (1, 9):
             print ("Pain test " + str(i) + ": " + str(i) + " int VS 2 sba") 
