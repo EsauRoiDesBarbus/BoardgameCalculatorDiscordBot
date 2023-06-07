@@ -44,7 +44,7 @@ class Ship:
         self.hull = hull
         self.comp = computer
         self.shie = shield
-        self.canon_array = np.array(canon_array  ) # [y, o, b, r, p], y = number of pink dice, o = number of orange dice etc
+        self.canon_array = np.array(canon_array  ) # [y, o, b, r, p], y = number of yellow dice, o = number of orange dice etc
         self.missi_array = np.array(missile_array) # [y, o, b, r, p], same
 
     def toString (self):
@@ -605,6 +605,7 @@ class BattleWinChances:
 
             #print ("nb_outcomes =", nb_outcomes, "probas =", proba_outcomes, "can hit =", can_hit )
             proba_log_outcomes = [np.log (outcome) - np.log(6) for outcome in proba_outcomes]
+            proba_log_outcomes+= [np.log (1) - np.log(6) for _ in range (4)] + [np.log (2) - np.log(6)]# outcomes of the rift canon
 
             damages_per_alive = [] #list where 1st element is for 1 alive ship, 2nd for 2 alive ships and so on
             damages_per_alive_missiles = []
@@ -624,12 +625,14 @@ class BattleWinChances:
         self.transition_table += transition_table_missiles
 
     def possibleResultsOfDice (self, dice, proba_log_outcomes, target_hp, can_hit):
-        nb_outcomes = len (proba_log_outcomes) -1
+        nb_outcomes = len (proba_log_outcomes) -1 -5
         nb_targets = len(target_hp)
+
+        rift_result = [(3,1), (2,0), (1,0), (0,1)] # list of pink dice possibility, (damage, self damage)
 
 
         max_dice = 0
-        for i in range (4):
+        for i in range (5):
             max_dice = max(max_dice, dice[i])
 
         fct = factorialLog (max_dice)
@@ -638,42 +641,52 @@ class BattleWinChances:
 
         total_possibilities = 1 #total results of the dice
 
+        nb_outcomes_rift = 4 # rift canon has 4 results (blank does not count)
         for die_type in range (4): #todo rift
-            total_possibilities*= blockSize (nb_outcomes, dice[die_type]-1) #POSSIBLEBUG
+            total_possibilities*= blockSize (nb_outcomes, dice[die_type]-1) # the number of dices outcome follows the same formula as the number of states
+        total_possibilities*= blockSize (nb_outcomes_rift, dice[4]-1) 
 
         # range all results 
-        result = [0 for _ in range (4*nb_outcomes)] # nb_outcomes for each of the 4 die type
+        result = [0 for _ in range (4*nb_outcomes+nb_outcomes_rift)] # nb_outcomes for each of the 4 die type and rift
 
         remaining_dice = 1*dice
 
         total_proba = 0.0
 
         damages_per_result = [] #list of all damages per die results
+        which_die = [0 for _ in range (nb_outcomes)] + [1 for _ in range (nb_outcomes)] + [2 for _ in range (nb_outcomes)] + [3 for _ in range (nb_outcomes)] + [4 for _ in range (nb_outcomes_rift)]# tells which dice the result i belong to
 
         for _ in range (total_possibilities):
             #it works like a clock, whenever one die does a full turn, the next one moves one step
-            for i in range (4*nb_outcomes):
-                if remaining_dice[i//nb_outcomes] >=1 : #if any dice left, increment hit value
+            for i in range (4*nb_outcomes+nb_outcomes_rift):
+                if remaining_dice[which_die[i]] >=1 : #if any dice left, increment hit value
                     result[i]+=1
-                    remaining_dice[i//nb_outcomes]-=1
+                    remaining_dice[which_die[i]]-=1
                     break
                 else:
-                    remaining_dice[i//nb_outcomes]+=result[i]
+                    remaining_dice[which_die[i]]+=result[i]
                     result[i]=0 #reinitialize
 
             #print ("result =", result)
 
             # compute probability
-            # Each die type is independant, 
+            # Each die type is independant, so the proba is the product of each die proba, hence log proba is the sum
             log_proba = 0 #using exp and log to reduce numerical errors
-            for die in range (4):
+            for die in range (5):
+                if die<4:
+                    rift = False
+                    nb_out = nb_outcomes
+                else:
+                    rift = True
+                    nb_out = nb_outcomes_rift
                 log_proba += fct[dice[die]] # ln(nb_dice!)
                 misses = dice[die]
-                for outcome in range (nb_outcomes):
+                for outcome in range (nb_out):
                     hits = result[nb_outcomes*die+outcome]
                     misses -= hits
-                    log_proba += -fct[hits] + hits*proba_log_outcomes[outcome] #  -ln(nb_hit!) + nb_hit*ln(proba_hit)
-                log_proba += -fct[misses] + misses*proba_log_outcomes[nb_outcomes]
+                    log_proba += -fct[hits] + hits*proba_log_outcomes[   outcome +rift*(nb_outcomes+1)] #  -ln(nb_hit!) + nb_hit*ln(proba_hit)
+                log_proba += -fct[misses] + misses*proba_log_outcomes[nb_outcomes+rift*(nb_outcomes_rift+1)]
+                
             proba = np.exp( log_proba )
             total_proba += proba
 
@@ -681,16 +694,17 @@ class BattleWinChances:
 
             damages = []
             not_done = True
+            
 
             unassigned_result = result.copy()
 
-            assignements = [0 for i in range (4*nb_outcomes*nb_targets)] # for each result type, there is one cell for each ship
+            assignements = [0 for i in range ((4*nb_outcomes+nb_outcomes_rift)*nb_targets)] # for each result type, there is one cell for each ship
             while (not_done):
                 not_done = False
                 for target in range (nb_targets):
                     for die in range (4):
                         for outcome in range (nb_outcomes):
-                            i = (target*4 + die)*nb_outcomes + outcome
+                            i = target*(4*nb_outcomes+nb_outcomes_rift) + die*nb_outcomes + outcome
                             if (not_done==False):
                                 if (unassigned_result[die*nb_outcomes + outcome] >=1)and(outcome < can_hit[target]): #if any dice left, increment hit value
                                     assignements[i]+=1
@@ -699,6 +713,18 @@ class BattleWinChances:
                                 else:
                                     unassigned_result[die*nb_outcomes + outcome]+=assignements[i]
                                     assignements[i]=0 #reinitialize
+                    # rift canon
+                    die = 4
+                    for outcome in range (nb_outcomes_rift):
+                        i = target*(4*nb_outcomes+nb_outcomes_rift) + die*nb_outcomes + outcome
+                        if (not_done==False):
+                            if (unassigned_result[die*nb_outcomes + outcome] >=1):
+                                assignements[i]+=1
+                                unassigned_result[die*nb_outcomes + outcome]-=1
+                                not_done = True
+                            else:
+                                unassigned_result[die*nb_outcomes + outcome]+=assignements[i]
+                                assignements[i]=0 #reinitialize
 
                 una = 0 #number of unassigned dice
                 for res in unassigned_result:
@@ -709,12 +735,24 @@ class BattleWinChances:
                     for target in range (nb_targets):
                         for die in range (4):
                             for outcome in range (nb_outcomes):
-                                damage[target*4 + die]+= assignements[(target*4+die)*nb_outcomes+outcome]
+                                damage[target*4 + die]+= assignements[target*(4*nb_outcomes+nb_outcomes_rift) + die*nb_outcomes + outcome]
+                        # rift canon
+                        die = 4
+                        for outcome in range (nb_outcomes_rift): # the 4th outcome is the self damage
+                            if rift_result[outcome][0]>0:
+                                damage[target*4 + rift_result[outcome][0]-1]+= assignements[target*(4*nb_outcomes+nb_outcomes_rift) + die*nb_outcomes + outcome]
 
                     damage = listToTuple (damage)
                     damages.append (damage)
 
-            damages = [proba] + [0] + damages #TODO: second is self hits
+            # rift self hits
+            self_hits = 0
+            die = 4
+            for outcome in range (nb_outcomes_rift):
+                self_hits += rift_result[outcome][1]* result[nb_outcomes*die+outcome]
+
+
+            damages = [proba] + [self_hits] + damages
 
             damages_per_result.append (damages)
 
@@ -830,7 +868,7 @@ if __name__ == '__main__':
     #test = BattleWinChances ([interceptor, dreadnought], [cruiser])
 
 
-    if (True):
+    if (False):
         eridan1 = Ship("cru", 2, 2, 3, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
         eridan2 = Ship("cru", 2, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
         ancient = Ship("npc", 2, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
@@ -840,9 +878,20 @@ if __name__ == '__main__':
 
         #plt.show()
 
+    eridani_test = True
     npc_dam_test = True
     missile_test = True
-    perform_test = True
+    riftcan_test = True
+    perform_test = False
+
+
+    if (eridani_test):
+        eridan1 = Ship("cru", 2, 2, 3, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
+        eridan2 = Ship("cru", 2, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
+        ancient = Ship("npc", 2, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+
+        test = BattleWinChances ([eridan1], [ancient]); print (test.initial_win_chance)
+        test = BattleWinChances ([eridan2], [ancient]); print (test.initial_win_chance)
 
     if (npc_dam_test):
         plt.close ()
@@ -912,6 +961,13 @@ if __name__ == '__main__':
         test = BattleWinChances ([int_att, dre_att], [int_def]); print (test.initial_win_chance)
 
         print (" ")
+
+    if (riftcan_test):
+        cru_att = Ship("cru", 1, 2, 2, 0, 0, [0,0,0,0,1], [0,0,0,0,0])
+        ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
+        print ("rift cruiser VS ancient")
+        test = BattleWinChances ([cru_att], [ancient]); print (test.initial_win_chance)
+
 
     if (perform_test):
         plt.close ()
