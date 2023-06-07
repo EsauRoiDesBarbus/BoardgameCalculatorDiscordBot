@@ -332,26 +332,34 @@ class BattleWinChances:
             after_damage_state[0] = turn -1
         
 
-        sign = 1
-        first_index = self.def_index #firing on defense ships
-        last_index  = len (current_state)
-        if firing_ship_side == "def":
+        
+        if firing_ship_side == "att":
+            sign = 1
+            indexes = [self.def_index, len (current_state), self.att_index, self.def_index] # canon fire on def ships, rift canons fire on att ships
+        else:
             sign =-1 #attack maximize winrate, defense minimize win rate
-            first_index = self.att_index #firing on attack ships
-            last_index  = self.def_index
+            indexes = [self.att_index, self.def_index,self.def_index, len (current_state)] # canon fire on att ships, rift canons fire on def ships
+        
 
         npc_flag = False # tells whether we need to use npc targeting rule
         prio_list = []
         if firing_ship.type=="npc":
             npc_flag = True
             prio_list = [ship.prio for ship in enmy_ship_list]
-        return (turn, sign, after_damage_state, first_index, last_index, alive, npc_flag, prio_list)
+        prio_rift_list = []
+        for ship in ally_ship_list:
+            if ship.canon_array[4]>0:
+                prio_rift_list.append (ship.prio)
+            else:
+                prio_rift_list.append (0)
+
+        return (turn, sign, after_damage_state, indexes, alive, npc_flag, prio_list, prio_rift_list)
 
     def computeStateWinChance (self, current_state) :
         # Writes and solves the win chance equation for the hp state for all round 
         # round number is added at the start of the index
 
-        turn, sign, after_damage_state, first_index, last_index, alive, npc_flag, prio_list = self.readStateInfo (current_state)
+        turn, sign, after_damage_state, indexes, alive, npc_flag, prio_list, prio_rift_list = self.readStateInfo (current_state)
 
         if alive >0:
             win_chance = 0.0
@@ -359,9 +367,10 @@ class BattleWinChances:
             for _ in range (len(damages_per_result)-1 ): # for each dice result (last is full miss)
                 damages = damages_per_result[_]
                 proba = damages[0]
-                self_hits = damages [1] #TODO self hits
 
-                max_chance, best_next_state = self.findBestAssignment (sign, after_damage_state, first_index, last_index, damages[2:], npc_flag, prio_list)
+                after_damage_state2 = self.applySelfHits (damages[1], after_damage_state, indexes[2], indexes[3], prio_rift_list)
+
+                max_chance, best_next_state = self.findBestAssignment (sign, after_damage_state2, indexes[0], indexes[1], damages[2:], npc_flag, prio_list)
 
                 win_chance += proba*sign*max_chance
             
@@ -372,6 +381,35 @@ class BattleWinChances:
             proba_full_miss = 1.0
 
         return (win_chance, proba_full_miss)
+
+    def applySelfHits (self, self_hits, state_before_hits, first_index, last_index, prio_rift_list):
+
+        if self_hits==0:
+            return (state_before_hits) # no need to do the rest if there are no self hits
+
+        # create a list of possible assignments
+        nb_ally_ships = last_index - first_index
+        damage_repartition = [0 for _ in range (nb_ally_ships-1)]
+        total_possibilities = blockSize (nb_ally_ships-1, self_hits) # number of possible damage assignments
+        damage_list = []
+        unassigned_hits = self_hits
+        for _ in range (nb_ally_ships):
+            damages = [0 for _ in range (nb_ally_ships*4)]
+            for i in range (nb_ally_ships-1):
+                if unassigned_hits >=1:
+                    damage_repartition[i]+=1
+                else :
+                    unassigned_hits += damage_repartition[i]
+                    damage_repartition[i] = 0
+            damages [(nb_ally_ships-1)*4] = unassigned_hits
+
+            damage_list.append (listToTuple(damages))
+
+        sign = 1 #does not matter
+        npc_flag = True # rift follow the same rules as npcs
+        max_chance, best_next_state = self.findBestAssignment (sign, state_before_hits, first_index, last_index, damage_list, npc_flag, prio_rift_list)
+
+        return (best_next_state)
 
     def findBestAssignment (self, sign, state, first_index, last_index, assignment_list, npc_flag=False, prio_list = []):
         max_chance = -1000.0
@@ -534,7 +572,7 @@ class BattleWinChances:
     def propagateStateExpectancy (self, current_state, full_miss) :
         # Ranges all dice results and propagates expectancy through it
 
-        turn, sign, after_damage_state, first_index, last_index, alive, npc_flag, prio_list = self.readStateInfo (current_state)
+        turn, sign, after_damage_state, indexes, alive, npc_flag, prio_list, prio_rift_list = self.readStateInfo (current_state)
 
         if alive >0:
             damages_per_result = self.transition_table [turn][alive-1] # list of outcomes with each a proba and all possible damage assignements
@@ -542,7 +580,9 @@ class BattleWinChances:
                 damages = damages_per_result[_]
                 proba = damages[0]
 
-                max_chance, best_next_state = self.findBestAssignment (sign, after_damage_state, first_index, last_index, damages[2:], npc_flag, prio_list)
+                after_damage_state2 = self.applySelfHits (damages[1], after_damage_state, indexes[2], indexes[3], prio_rift_list)
+
+                max_chance, best_next_state = self.findBestAssignment (sign, after_damage_state2, indexes[0], indexes[1], damages[2:], npc_flag, prio_list)
 
                 self.state_expectancy[listToTuple(best_next_state)]+=proba*self.state_expectancy[listToTuple(current_state)]
 
@@ -878,9 +918,9 @@ if __name__ == '__main__':
 
         #plt.show()
 
-    eridani_test = True
-    npc_dam_test = True
-    missile_test = True
+    eridani_test = False
+    npc_dam_test = False
+    missile_test = False
     riftcan_test = True
     perform_test = False
 
@@ -963,10 +1003,27 @@ if __name__ == '__main__':
         print (" ")
 
     if (riftcan_test):
+        plt.close ()
+
+        print ("One volley tests")
+        cru_att = Ship("cru", 1, 2, 0, 0, 0, [0,0,0,0,1], [0,0,0,0,0])
+        print ("ship with 1 pink VS uber glass canon with 0 hull (should return 33% and 50% chance of killing def ship)")
+        glassca = Ship("cru", 1, 0, 0, 4, 0, [8,0,0,0,0], [0,0,0,0,0])
+        test = BattleWinChances ([cru_att], [glassca]); print (test.initial_win_chance)
+        print ("ship with 1 pink VS uber glass canon with 1 hull (should return 17% and 33% chance of killing def ship)")
+        glassca = Ship("cru", 1, 0, 1, 4, 0, [8,0,0,0,0], [0,0,0,0,0])
+        test = BattleWinChances ([cru_att], [glassca]); print (test.initial_win_chance)
+        print ("ship with 1 pink VS uber glass canon with 2 hull (should return  0% and 17% chance of killing def ship)")
+        glassca = Ship("cru", 1, 0, 2, 4, 0, [8,0,0,0,0], [0,0,0,0,0])
+        test = BattleWinChances ([cru_att], [glassca]); print (test.initial_win_chance)
+
+
         cru_att = Ship("cru", 1, 2, 2, 0, 0, [0,0,0,0,1], [0,0,0,0,0])
         ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
-        print ("rift cruiser VS ancient")
+        print ("early rift cruiser VS ancient")
         test = BattleWinChances ([cru_att], [ancient]); print (test.initial_win_chance)
+
+        print (" ")
 
 
     if (perform_test):
