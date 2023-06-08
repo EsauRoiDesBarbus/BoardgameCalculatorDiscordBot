@@ -905,23 +905,12 @@ if __name__ == '__main__':
 
     #test = BattleWinChances ([interceptor, dreadnought], [cruiser])
 
-
-    if (False):
-        eridan1 = Ship("cru", 2, 2, 3, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
-        eridan2 = Ship("cru", 2, 3, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
-        ancient = Ship("npc", 2, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
-
-        test = BattleWinChances ([eridan1], [ancient]); print (test.initial_win_chance)
-        test = BattleWinChances ([eridan2], [ancient]); print (test.initial_win_chance)
-
-        #plt.show()
-
-    eridani_test = False
-    npc_dam_test = False
-    missile_test = False
-    riftcan_test = False
+    eridani_test = True
+    npc_dam_test = True
+    missile_test = True
+    riftcan_test = True
     balance_test = True
-    perform_test = False
+    perform_test = True
 
 
     if (eridani_test):
@@ -1022,7 +1011,10 @@ if __name__ == '__main__':
         print ("early rift cruiser VS ancient")
         test = BattleWinChances ([cru_att], [ancient]); print (test.initial_win_chance)
 
+        print (" ")
+
     if (balance_test):
+        plt.close ()
         nb = 1
         print ("balance complains tests")
         cruslow = Ship("cru",nb, 0, 6, 0, 0, [0,0,0,0,1], [0,0,0,0,0])
