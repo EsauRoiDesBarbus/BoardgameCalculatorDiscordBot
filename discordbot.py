@@ -61,7 +61,7 @@ async def on_message(message):
             response+= "> number type initiative hull computer shield canons missiles.\n"
             response+= "Type = int, cru, dre, sba or npc. Canons are written as a list of letters, one letter per die, **y**ellow, **o**range, **b**lue, **r**ed, **p**ink. Misiles are the same but starting with letter **m**. "
             response+= "Example:\n> 5 int 4 3 2 1 yyyyyoooobbbrrp myyyyooobbr\nmeans 5 interceptors with 4 initiative, 3 hull, 2 computer, 1 shield, 5 yellow canons, 4 orange canons, 3 blue canons, 2 red canons and 1 pink canon, 4 yellow missiles, 3 orange missiles, 2 blue missiles and 1 red missile.\n"
-            response+= "Any question, suggestion, bug report, dm Esaü#5796. For more info, type:\n"
+            response+= "Any question, suggestion, bug report, dm esauroidesbarbus. For more info, type:\n"
             response+= "> %battle about"
             await message.channel.send(response)
             return
@@ -78,7 +78,7 @@ async def on_message(message):
             response+= "- Improve UI based on feedback.\n"
             response+= "- Three way battles.\n"
             response+= "- Regenerating ships (I rely on ship hp being nonincreasing so regen is very difficult).\n"
-            response+= "Any question, suggestion, bug report, dm Esaü#5796."
+            response+= "Any question, suggestion, bug report, dm esauroidesbarbus."
             await message.channel.send(response)
             return
         
