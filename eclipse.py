@@ -64,8 +64,6 @@ class Ship:
         for i in range (5):
             if self.missi_array[i]>0:
                 response += str(self.missi_array[i])+' '+ colors[i] + " missile"  +(self.missi_array[i]>1)*"s" +", "
-        if self.canon_array[4]+self.missi_array[4]>0:
-            response += "**WARNING! PINK DICE NOT SUPPORTED FOR NOW!, ** "
         return (response[:-2]) #remove the last space and ,
             
 
@@ -921,7 +919,8 @@ if __name__ == '__main__':
     eridani_test = False
     npc_dam_test = False
     missile_test = False
-    riftcan_test = True
+    riftcan_test = False
+    balance_test = True
     perform_test = False
 
 
@@ -1022,6 +1021,36 @@ if __name__ == '__main__':
         ancient = Ship("npc", 1, 2, 1, 1, 0, [2,0,0,0,0], [0,0,0,0,0])
         print ("early rift cruiser VS ancient")
         test = BattleWinChances ([cru_att], [ancient]); print (test.initial_win_chance)
+
+    if (balance_test):
+        nb = 1
+        print ("balance complains tests")
+        cruslow = Ship("cru",nb, 0, 6, 0, 0, [0,0,0,0,1], [0,0,0,0,0])
+        crufast = Ship("cru",nb,10, 6, 0, 0, [0,0,0,0,1], [0,0,0,0,0])
+        cru_def = Ship("cru",nb, 2, 4, 1, 0, [0,1,0,0,0], [0,0,0,0,0])
+        print ("rift+advhull cruiser VS plasma+advhull cruiser")
+        test = BattleWinChances ([crufast], [cru_def])
+        test = BattleWinChances ([cruslow], [cru_def])
+
+        cru_def = Ship("cru",nb, 2, 4, 1, 0, [0,0,1,0,0], [0,0,0,0,0])
+        print ("rift+advhull cruiser VS soliton+advhull cruiser")
+        test = BattleWinChances ([crufast], [cru_def])
+        test = BattleWinChances ([cruslow], [cru_def])
+        
+        cru_def = Ship("cru",nb, 2, 3, 3, 0, [0,1,0,0,0], [0,0,0,0,0])
+        print ("rift+advhull cruiser VS plasma + sentienthull cruiser")
+        test = BattleWinChances ([crufast], [cru_def])
+        test = BattleWinChances ([cruslow], [cru_def])
+
+        cru_def = Ship("cru",nb, 2, 4, 2, 0, [0,1,0,0,0], [0,0,0,0,0])
+        print ("rift+advhull cruiser VS plasma+advhull+2comp cruiser")
+        test = BattleWinChances ([crufast], [cru_def])
+        test = BattleWinChances ([cruslow], [cru_def])
+
+        cru_def = Ship("cru",nb, 2, 1, 4, 0, [0,1,0,0,0], [0,0,0,0,0])
+        print ("rift+advhull cruiser VS plasma+2comp cruiser")
+        test = BattleWinChances ([crufast], [cru_def])
+        test = BattleWinChances ([cruslow], [cru_def])
 
         print (" ")
 
