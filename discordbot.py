@@ -90,12 +90,13 @@ async def on_message(message):
         
         argument = message.content[len(prefix):]
         regex1 = re.search("(.*)(vs|VS|Vs|vS)(.*)" , message.content)
+        error_string = " Type:\n> %battle help or use webapp\nhttps://eclipseboardgamecalculator.duckdns.org/"
         if regex1 ==None:
-            await message.channel.send("I do not understand your command. Type:\n> %battle help")
+            await message.channel.send("I do not understand your command." + error_string)
             return
         for i in range (4):
             if regex1[i] ==None:
-                await message.channel.send("I do not understand your command. Type:\n> %battle help")
+                await message.channel.send("I do not understand your command." + error_string)
                 return
         sides = [regex1[1], regex1[3]]
 
@@ -107,11 +108,11 @@ async def on_message(message):
             for ship in ships:
                 regex = re.search(r"(\d+) +(int|cru|dre|sba|npc) +(\d+) +(\d+) +(\d+) +(\d+) +(.*)?", ship) #number type init hull comp shield weapons
                 if regex ==None:
-                    await message.channel.send("I do not understand ship blueprint number " + str(ship_counter) + ". Type:\n> %battle help")
+                    await message.channel.send("I do not understand ship blueprint number " + str(ship_counter) + "." + + error_string)
                     return
                 for i in range (8):
                     if regex[i] ==None:
-                        await message.channel.send("I do not understand ship blueprint number " + str(ship_counter) + ". Type:\n> %battle help")
+                        await message.channel.send("I do not understand ship blueprint number " + str(ship_counter) + "." + error_string)
                         return
                 weapons = regex[7].split ('m')
                 canons = [weapons[0].count('y'), weapons[0].count('o'), weapons[0].count('b'), weapons[0].count('r'), weapons[0].count('p')]
