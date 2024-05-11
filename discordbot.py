@@ -5,6 +5,12 @@ from discord.ext import commands
 import random
 import time
 import signal
+import os
+
+# change directory to containing directory
+abspath = os.path.abspath(__file__)
+dname = os.path.dirname(abspath)
+os.chdir(dname)
 
 
 def handler (signum, frame):
@@ -94,17 +100,18 @@ async def on_message(message):
         sides = [regex1[1], regex1[3]]
 
         ship_list_list = []
+        ship_counter = 1
         for side in sides:
             ships = side.split('+')
             ship_list = []
             for ship in ships:
-                regex = re.search(r"(\d+) (int|cru|dre|sba|npc) (\d+) (\d+) (\d+) (\d+)?(.*)", ship)
+                regex = re.search(r"(\d+) +(int|cru|dre|sba|npc) +(\d+) +(\d+) +(\d+) +(\d+) +(.*)?", ship) #number type init hull comp shield weapons
                 if regex ==None:
-                    await message.channel.send("I do not understand your command. Type:\n> %battle help")
+                    await message.channel.send("I do not understand ship blueprint number " + str(ship_counter) + ". Type:\n> %battle help")
                     return
                 for i in range (8):
                     if regex[i] ==None:
-                        await message.channel.send("I do not understand your command. Type:\n> %battle help")
+                        await message.channel.send("I do not understand ship blueprint number " + str(ship_counter) + ". Type:\n> %battle help")
                         return
                 weapons = regex[7].split ('m')
                 canons = [weapons[0].count('y'), weapons[0].count('o'), weapons[0].count('b'), weapons[0].count('r'), weapons[0].count('p')]
@@ -115,6 +122,7 @@ async def on_message(message):
                 ship = Ship(regex[2], int(regex[1]), int(regex[3]), int(regex[4]), int(regex[5]), int(regex[6]), canons, missis)
                 ship_list.append(ship)
             ship_list_list.append(ship_list)
+            ship_counter += 1
 
         att_ships = ship_list_list[0]
         def_ships = ship_list_list[1]
