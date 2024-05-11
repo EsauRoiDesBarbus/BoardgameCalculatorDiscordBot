@@ -67,7 +67,7 @@ async def on_message(message):
             response+= "> number type initiative hull computer shield canons missiles.\n"
             response+= "Type = int, cru, dre, sba or npc. Canons are written as a list of letters, one letter per die, **y**ellow, **o**range, **b**lue, **r**ed, **p**ink. Misiles are the same but starting with letter **m**. "
             response+= "Example:\n> 5 int 4 3 2 1 yyyyyoooobbbrrp myyyyooobbr\nmeans 5 interceptors with 4 initiative, 3 hull, 2 computer, 1 shield, 5 yellow canons, 4 orange canons, 3 blue canons, 2 red canons and 1 pink canon, 4 yellow missiles, 3 orange missiles, 2 blue missiles and 1 red missile.\n"
-            response+= "Checkout the webapp: https://eclipseboardgamecalculator.duckdns.org/"
+            response+= "Checkout the webapp: https://eclipseboardgamecalculator.duckdns.org/ \n"
             response+= "Any question, suggestion, bug report, dm esauroidesbarbus. For more info, type:\n"
             response+= "> %battle about"
             await message.channel.send(response)
@@ -91,7 +91,7 @@ async def on_message(message):
         
         argument = message.content[len(prefix):]
         regex1 = re.search("(.*)(vs|VS|Vs|vS)(.*)" , message.content)
-        error_string = " Type:\n> %battle help or use webapp\nhttps://eclipseboardgamecalculator.duckdns.org/"
+        error_string = " Type:\n> %battle help\nor use webapp: https://eclipseboardgamecalculator.duckdns.org/"
         if regex1 ==None:
             await message.channel.send("I do not understand your command." + error_string)
             return
@@ -109,7 +109,7 @@ async def on_message(message):
             for ship in ships:
                 regex = re.search(r"(\d+) +(int|cru|dre|sba|npc) +(\d+) +(\d+) +(\d+) +(\d+) +(.*)?", ship) #number type init hull comp shield weapons
                 if regex ==None:
-                    await message.channel.send("I do not understand ship blueprint number " + str(ship_counter) + "." + + error_string)
+                    await message.channel.send("I do not understand ship blueprint number " + str(ship_counter) + "." + error_string)
                     return
                 for i in range (8):
                     if regex[i] ==None:
