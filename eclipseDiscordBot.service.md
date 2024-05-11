@@ -9,7 +9,7 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 Restart=always
-RestartSec=1
+RestartSec=60
 User=pi
 ExecStart=/usr/bin/python3 /home/pi/Eclipse/BoardgameCalculatorDiscordBot/discordbot.py
 
@@ -20,6 +20,6 @@ WantedBy=multi-user.target
 
 Then enter
 
-```systemctl start eclipseDiscordBot.server```
+```systemctl start eclipseDiscordBot```
 
-```systemctl enable eclipseDiscordBot.server```
+```systemctl enable eclipseDiscordBot```
