@@ -23,6 +23,8 @@ tokenfile = open("token.txt")
 TOKEN = tokenfile.read ()
 
 
+WEB_APP = "https://tinyurl.com/eclipse-battle"
+
 
 waitsentences = [
     "I beep and I boop.",
@@ -67,7 +69,7 @@ async def on_message(message):
             response+= "> number type initiative hull computer shield canons missiles.\n"
             response+= "Type = int, cru, dre, sba or npc. Canons are written as a list of letters, one letter per die, **y**ellow, **o**range, **b**lue, **r**ed, **p**ink. Misiles are the same but starting with letter **m**. "
             response+= "Example:\n> 5 int 4 3 2 1 yyyyyoooobbbrrp myyyyooobbr\nmeans 5 interceptors with 4 initiative, 3 hull, 2 computer, 1 shield, 5 yellow canons, 4 orange canons, 3 blue canons, 2 red canons and 1 pink canon, 4 yellow missiles, 3 orange missiles, 2 blue missiles and 1 red missile.\n"
-            response+= "Checkout the webapp: https://eclipseboardgamecalculator.duckdns.org/ \n"
+            response+= "Checkout the webapp: " + WEB_APP + " \n"
             response+= "Any question, suggestion, bug report, dm esauroidesbarbus. For more info, type:\n"
             response+= "> %battle about"
             await message.channel.send(response)
@@ -91,7 +93,7 @@ async def on_message(message):
         
         argument = message.content[len(prefix):]
         regex1 = re.search("(.*)(vs|VS|Vs|vS)(.*)" , message.content)
-        error_string = " Type:\n> %battle help\nor use webapp: https://eclipseboardgamecalculator.duckdns.org/"
+        error_string = " Type:\n> %battle help\nor use webapp: " + WEB_APP
         if regex1 ==None:
             await message.channel.send("I do not understand your command." + error_string)
             return
